@@ -1,0 +1,270 @@
+{% extends 'base.html' %}
+
+{% block title %}Persk - ホーム{% endblock %}
+
+{% block content %}
+<!-- Progress Section -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">今日の進捗</h5>
+                <div class="progress-ring-container">
+                    <svg id="progressRing" width="120" height="120">
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="#e9ecef" stroke-width="8"/>
+                        <circle id="progressCircle" cx="60" cy="60" r="50" fill="none" stroke="#007bff" stroke-width="8" 
+                                stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/>
+                    </svg>
+                    <div class="progress-text">
+                        <span id="progressPercent">0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">連続達成</h5>
+                <div class="streak-container">
+                    <i class="bi bi-fire text-danger" style="font-size: 3rem;"></i>
+                    <div class="streak-text">
+                        <span id="streakCount">0</span> 日
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Now Card Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">今の一手</h5>
+                <div id="nowCard">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-question-circle" style="font-size: 2rem;"></i>
+                        <p class="mt-2">診断を受けてあなたのタイプを確認しましょう</p>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#diagModal">
+                            <i class="bi bi-clipboard-check"></i> 診断を開始
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task List Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">タスク一覧</h5>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#taskModal">
+                    <i class="bi bi-plus-lg"></i> 新規タスク
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="taskList">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-list-task" style="font-size: 2rem;"></i>
+                        <p class="mt-2">タスクがありません</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Modal -->
+<div class="modal fade" id="taskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">タスク作成</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="taskForm">
+                    <div class="mb-3">
+                        <label for="taskTitle" class="form-label">タイトル</label>
+                        <input type="text" class="form-control" id="taskTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskDeadline" class="form-label">期限</label>
+                        <input type="datetime-local" class="form-control" id="taskDeadline">
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskEstimate" class="form-label">予想時間（分）</label>
+                        <input type="number" class="form-control" id="taskEstimate" min="0" value="0">
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskTags" class="form-label">タグ</label>
+                        <input type="text" class="form-control" id="taskTags" placeholder="創作, 仕事, 学習">
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskImportance" class="form-label">重要度</label>
+                        <select class="form-select" id="taskImportance">
+                            <option value="0">低</option>
+                            <option value="1">中</option>
+                            <option value="2">高</option>
+                            <option value="3">最高</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="saveTaskBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Diagnosis Modal -->
+<div class="modal fade" id="diagModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">性格診断</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="diagContent">
+                    <div class="text-center">
+                        <h4>あなたの作業スタイルを診断します</h4>
+                        <p class="text-muted">7つの質問に答えて、最適なタスク管理方法を見つけましょう</p>
+                        <button class="btn btn-primary" id="startDiagnosisBtn">
+                            <i class="bi bi-play-fill"></i> 診断開始
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">設定</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="settingsForm">
+                    <div class="mb-3">
+                        <label class="form-label">通知設定</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="notifyEmail">
+                            <label class="form-check-label" for="notifyEmail">
+                                メール通知
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="notifyBrowser">
+                            <label class="form-check-label" for="notifyBrowser">
+                                ブラウザ通知
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dailyGoal" class="form-label">1日の目標時間（時間）</label>
+                        <input type="number" class="form-control" id="dailyGoal" min="1" max="24" value="8">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.progress-ring-container {
+    position: relative;
+    display: inline-block;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.streak-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.streak-text {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.task-item {
+    border-left: 4px solid #dee2e6;
+    transition: all 0.3s ease;
+}
+
+.task-item:hover {
+    border-left-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.task-item.doing {
+    border-left-color: #28a745;
+    background-color: #d4edda;
+}
+
+.task-item.done {
+    border-left-color: #6c757d;
+    background-color: #e9ecef;
+    opacity: 0.7;
+}
+
+.task-actions {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.task-item:hover .task-actions {
+    opacity: 1;
+}
+
+.diagnosis-question {
+    display: none;
+}
+
+.diagnosis-question.active {
+    display: block;
+}
+
+.progress-indicator {
+    height: 4px;
+    background-color: #e9ecef;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: #007bff;
+    transition: width 0.3s ease;
+}
+</style>
+{% endblock %}

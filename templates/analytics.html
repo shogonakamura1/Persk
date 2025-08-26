@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+
+{% block title %}Persk - 分析{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">分析ダッシュボード</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 id="totalFocusTime">0</h3>
+                            <p class="text-muted">総フォーカス時間（時間）</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 id="totalTasks">0</h3>
+                            <p class="text-muted">完了タスク数</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 id="avgFocusTime">0</h3>
+                            <p class="text-muted">平均フォーカス時間（分）</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h3 id="completionRate">0%</h3>
+                            <p class="text-muted">完了率</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">時間帯別フォーカス時間</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="hourlyChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">タグ別フォーカス時間</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="tagChart" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">最近のフォーカスセッション</h5>
+            </div>
+            <div class="card-body">
+                <div id="recentSessions">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-clock-history" style="font-size: 2rem;"></i>
+                        <p class="mt-2">フォーカスセッションがありません</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// 分析ページ用のJavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    loadAnalytics();
+});
+
+async function loadAnalytics() {
+    try {
+        // メトリクスデータを取得
+        const response = await api('/api/metrics/summary/?range=month');
+        
+        // 統計情報を更新
+        updateStats(response);
+        
+        // チャートを描画
+        drawCharts();
+        
+    } catch (error) {
+        console.error('分析データの読み込みに失敗しました:', error);
+    }
+}
+
+function updateStats(data) {
+    // 仮のデータで統計を更新
+    document.getElementById('totalFocusTime').textContent = 
+        Math.round(data.ring.actual / 3600 * 10) / 10;
+    document.getElementById('totalTasks').textContent = '0'; // 仮
+    document.getElementById('avgFocusTime').textContent = '0'; // 仮
+    document.getElementById('completionRate').textContent = '0%'; // 仮
+}
+
+function drawCharts() {
+    // 時間帯別チャート
+    const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
+    new Chart(hourlyCtx, {
+        type: 'line',
+        data: {
+            labels: ['0', '2', '4', '6', '8', '10', '12', '14', '16', '18', '20', '22'],
+            datasets: [{
+                label: 'フォーカス時間（分）',
+                data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    
+    // タグ別チャート
+    const tagCtx = document.getElementById('tagChart').getContext('2d');
+    new Chart(tagCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['仕事', '学習', '創作', 'その他'],
+            datasets: [{
+                data: [0, 0, 0, 0],
+                backgroundColor: [
+                    'rgb(255, 99, 132)',
+                    'rgb(54, 162, 235)',
+                    'rgb(255, 205, 86)',
+                    'rgb(201, 203, 207)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true
+        }
+    });
+}
+</script>
+{% endblock %}
