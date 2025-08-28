@@ -1,7 +1,9 @@
 import json
 from datetime import datetime, timedelta
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import logout
+from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -19,6 +21,14 @@ def home(request):
 def analytics(request):
     """分析ページ"""
     return render(request, 'analytics.html')
+
+
+@login_required
+def logout_view(request):
+    """ログアウト"""
+    logout(request)
+    messages.success(request, 'ログアウトしました')
+    return redirect('login')
 
 
 # API Views
@@ -45,7 +55,10 @@ def api_tasks(request):
                 {
                     'id': subtask.id,
                     'title': subtask.title,
-                    'done': subtask.done
+                    'done': subtask.done,
+                    'status': subtask.status,
+                    'started_at': subtask.started_at.isoformat() if subtask.started_at else None,
+                    'completed_at': subtask.completed_at.isoformat() if subtask.completed_at else None
                 }
                 for subtask in task.subtasks.all()
             ]
@@ -132,12 +145,13 @@ def api_task_start(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
-def api_task_stop(request, task_id):
-    """タスク停止"""
+def api_task_pause(request, task_id):
+    """タスク一時停止"""
     try:
         task = get_object_or_404(Task, id=task_id, user=request.user)
         now = timezone.now()
         
+        seconds = 0  # 初期化
         if task.started_at:
             # FocusLogを作成
             seconds = int((now - task.started_at).total_seconds())
@@ -149,11 +163,43 @@ def api_task_stop(request, task_id):
                 seconds=seconds
             )
         
-        task.status = 'todo'
+        task.status = 'paused'
         task.started_at = None
         task.save()
         
-        return JsonResponse({'ok': True, 'logged_seconds': seconds if task.started_at else 0})
+        return JsonResponse({'ok': True, 'logged_seconds': seconds})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_task_resume(request, task_id):
+    """タスク再開"""
+    try:
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+        now = timezone.now()
+
+        elapsed_seconds = 0  # 初期化
+        if task.started_at:
+            elapsed_seconds = int((now - task.started_at).total_seconds())
+            FocusLog.objects.create(
+                user=request.user,
+                task=task,
+                started_at=task.started_at,
+                stopped_at=now,
+                seconds=elapsed_seconds
+            )
+        
+        task.status = 'doing'
+        task.started_at = now
+        task.save()
+        
+        return JsonResponse({
+            'ok': True, 
+            'started_at': now.isoformat(),
+            'logged_seconds': elapsed_seconds
+        })
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=400)
 
@@ -217,6 +263,98 @@ def api_subtasks_bulk_upsert(request, task_id):
             })
         
         return JsonResponse({'ok': True, 'items': items})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_subtask_start(request, subtask_id):
+    """サブタスク開始"""
+    try:
+        subtask = get_object_or_404(SubTask, id=subtask_id, task__user=request.user)
+        now = timezone.now()
+        
+        subtask.status = 'doing'
+        subtask.started_at = now
+        subtask.save()
+        
+        return JsonResponse({'ok': True, 'started_at': now.isoformat()})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_subtask_pause(request, subtask_id):
+    """サブタスク一時停止"""
+    try:
+        subtask = get_object_or_404(SubTask, id=subtask_id, task__user=request.user)
+        now = timezone.now()
+        
+        seconds = 0  # 初期化
+        if subtask.started_at:
+            # FocusLogを作成
+            seconds = int((now - subtask.started_at).total_seconds())
+            FocusLog.objects.create(
+                user=request.user,
+                subtask=subtask,
+                started_at=subtask.started_at,
+                stopped_at=now,
+                seconds=seconds
+            )
+        
+        subtask.status = 'paused'
+        # started_atをNoneに設定しない（経過時間を維持するため）
+        subtask.save()
+        
+        return JsonResponse({'ok': True, 'logged_seconds': seconds})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_subtask_resume(request, subtask_id):
+    """サブタスク再開"""
+    try:
+        subtask = get_object_or_404(SubTask, id=subtask_id, task__user=request.user)
+        now = timezone.now()
+        
+        subtask.status = 'doing'
+        # started_atは既存の値を維持（経過時間を保持するため）
+        subtask.save()
+        
+        return JsonResponse({'ok': True, 'started_at': subtask.started_at.isoformat() if subtask.started_at else now.isoformat()})
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_subtask_complete(request, subtask_id):
+    """サブタスク完了"""
+    try:
+        subtask = get_object_or_404(SubTask, id=subtask_id, task__user=request.user)
+        now = timezone.now()
+        
+        # 実行中ならログを作成
+        if subtask.status == 'doing' and subtask.started_at:
+            seconds = int((now - subtask.started_at).total_seconds())
+            FocusLog.objects.create(
+                user=request.user,
+                subtask=subtask,
+                started_at=subtask.started_at,
+                stopped_at=now,
+                seconds=seconds
+            )
+        
+        subtask.status = 'done'
+        subtask.completed_at = now
+        subtask.started_at = None
+        subtask.save()
+        
+        return JsonResponse({'ok': True, 'completed_at': now.isoformat()})
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=400)
 
@@ -357,6 +495,29 @@ def api_metrics_summary(request):
                 'days': streak_days
             },
             'heatmap': []  # 仮実装
+        })
+    except Exception as e:
+        return JsonResponse({'ok': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_task_focus_time(request, task_id):
+    """タスクのフォーカス時間取得"""
+    try:
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+        
+        # このタスクのFocusLogから総フォーカス時間を計算
+        focus_logs = FocusLog.objects.filter(
+            user=request.user,
+            task=task
+        )
+        total_seconds = sum(log.seconds for log in focus_logs)
+        
+        return JsonResponse({
+            'ok': True,
+            'task_id': task_id,
+            'total_seconds': total_seconds
         })
     except Exception as e:
         return JsonResponse({'ok': False, 'error': str(e)}, status=400)

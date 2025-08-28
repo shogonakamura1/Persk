@@ -28,7 +28,7 @@
                 <span class="navbar-text me-3">
                     <i class="bi bi-person-circle"></i> {{ user.username }}
                 </span>
-                <a class="nav-link" href="{% url 'logout' %}">
+                <a class="nav-link" href="{% url 'tasks:logout' %}">
                     <i class="bi bi-box-arrow-right"></i> ログアウト
                 </a>
             </div>
@@ -44,7 +44,8 @@
     <!-- Fixed Focus Bar -->
     <div id="focusBar" class="fixed-bottom bg-dark text-white p-3" style="display: none;">
         <div class="container">
-            <div class="row align-items-center">
+            <!-- メインタスク -->
+            <div class="row align-items-center mb-2">
                 <div class="col">
                     <span class="me-3">
                         <i class="bi bi-play-circle-fill text-success"></i>
@@ -54,9 +55,33 @@
                 </div>
                 <div class="col-auto">
                     <button id="focusStopBtn" class="btn btn-outline-light btn-sm me-2">
-                        <i class="bi bi-pause-fill"></i> 停止
+                        <i class="bi bi-pause-fill"></i> 一時停止
+                    </button>
+                    <button id="focusStartBtn" class="btn btn-outline-light btn-sm me-2" style="display: none;">
+                        <i class="bi bi-play-fill"></i> 開始
+                    </button>
+                    <button id="focusResetBtn" class="btn btn-outline-warning btn-sm me-2">
+                        <i class="bi bi-arrow-clockwise"></i> リセット
                     </button>
                     <button id="focusCompleteBtn" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-lg"></i> 完了
+                    </button>
+                </div>
+            </div>
+            <!-- サブタスク -->
+            <div id="focusSubtaskBar" class="row align-items-center" style="display: none;">
+                <div class="col">
+                    <span class="me-3">
+                        <i class="bi bi-list-check text-info"></i>
+                        <span id="focusSubtaskName">サブタスク名</span>
+                    </span>
+                    <span id="focusSubtaskTimer" class="badge bg-info">00:00:00</span>
+                </div>
+                <div class="col-auto">
+                    <button id="focusSubtaskStopBtn" class="btn btn-outline-light btn-sm me-2">
+                        <i class="bi bi-pause-fill"></i> 一時停止
+                    </button>
+                    <button id="focusSubtaskCompleteBtn" class="btn btn-success btn-sm">
                         <i class="bi bi-check-lg"></i> 完了
                     </button>
                 </div>
@@ -88,7 +113,7 @@
     </script>
     
     {% load static %}
-    <script src="{% static 'js/app.js' %}"></script>
+    <script src="{% static 'js/app.js' %}?v=1.1"></script>
     
     {% block extra_js %}{% endblock %}
 </body>

@@ -2,8 +2,9 @@
 let state = {
     user: { id: null, mainType: null, subType: null },
     tasks: [],
-    running: { taskId: null, startedAt: null, paused: false },
-    csrfToken: csrfToken,
+    running: { taskId: null, startedAt: null, paused: false, totalSeconds: 0, pausedSeconds: 0 },
+    runningSubtask: { subtaskId: null, startedAt: null, paused: false, totalSeconds: 0, pausedSeconds: 0 },
+    csrfToken: typeof csrfToken !== 'undefined' ? csrfToken : '',
 };
 
 // API通信ラッパー
@@ -13,9 +14,18 @@ async function api(url, method = 'GET', body = null) {
         opt.headers['Content-Type'] = 'application/json';
         opt.body = JSON.stringify(body);
     }
+    
+    console.log(`API Call: ${method} ${url}`, body);
+    
     const r = await fetch(url, opt);
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
+    if (!r.ok) {
+        const errorText = await r.text();
+        console.error(`API Error: ${r.status} ${r.statusText}`, errorText);
+        throw new Error(errorText);
+    }
+    const response = await r.json();
+    console.log(`API Response:`, response);
+    return response;
 }
 
 // ユーティリティ関数
@@ -68,6 +78,18 @@ function renderTaskList() {
     const taskList = document.getElementById('taskList');
     if (!taskList) return;
     
+    // 現在開いている詳細画面を記憶
+    const openDetails = [];
+    state.tasks.forEach(task => {
+        const details = document.getElementById(`taskDetails${task.id}`);
+        if (details) {
+            const bsCollapseInstance = bootstrap.Collapse.getInstance(details);
+            if (bsCollapseInstance && bsCollapseInstance._isShown()) {
+                openDetails.push(task.id);
+            }
+        }
+    });
+    
     if (state.tasks.length === 0) {
         taskList.innerHTML = `
             <div class="text-center text-muted">
@@ -81,12 +103,13 @@ function renderTaskList() {
     const tasksHtml = state.tasks.map(task => {
         const isRunning = state.running.taskId === task.id;
         const statusClass = task.status === 'doing' ? 'doing' : task.status === 'done' ? 'done' : '';
+        const hasSubtasks = task.subtasks && task.subtasks.length > 0;
         
         return `
             <div class="task-item p-3 ${statusClass}" data-task-id="${task.id}">
                 <div class="row align-items-center">
                     <div class="col">
-                        <div class="d-flex align-items-center">
+                        <div class="d-flex align-items-center" onclick="showTaskTimer(${task.id})" style="cursor: pointer;">
                             <i class="bi ${getStatusIcon(task.status)} me-2"></i>
                             <div>
                                 <h6 class="mb-1">${task.title}</h6>
@@ -99,50 +122,107 @@ function renderTaskList() {
                         </div>
                     </div>
                     <div class="col-auto task-actions">
-                        ${task.status === 'todo' ? `
-                            <button class="btn btn-success btn-sm me-1" onclick="startTask(${task.id})">
-                                <i class="bi bi-play-fill"></i> 開始
-                            </button>
-                        ` : ''}
-                        ${task.status === 'doing' ? `
-                            <button class="btn btn-warning btn-sm me-1" onclick="stopTask(${task.id})">
-                                <i class="bi bi-pause-fill"></i> 停止
-                            </button>
+                        ${!hasSubtasks ? `
+                            ${task.status === 'todo' ? `
+                                <button class="btn btn-success btn-sm me-1" onclick="event.stopPropagation(); startTask(${task.id})">
+                                    <i class="bi bi-play-fill"></i> 開始
+                                </button>
+                            ` : ''}
+                            ${task.status === 'doing' ? `
+                                <button class="btn btn-warning btn-sm me-1" onclick="event.stopPropagation(); pauseTask(${task.id})">
+                                    <i class="bi bi-pause-fill"></i> 一時停止
+                                </button>
+                            ` : ''}
+                            ${task.status === 'paused' ? `
+                                <button class="btn btn-success btn-sm me-1" onclick="event.stopPropagation(); resumeTask(${task.id})">
+                                    <i class="bi bi-play-fill"></i> 再開
+                                </button>
+                            ` : ''}
+                            ${(task.status === 'doing' || task.status === 'paused') ? `
+                                <button class="btn btn-warning btn-sm me-1" onclick="event.stopPropagation(); resetTaskTimer(${task.id})">
+                                    <i class="bi bi-arrow-clockwise"></i> リセット
+                                </button>
+                            ` : ''}
                         ` : ''}
                         ${task.status !== 'done' ? `
-                            <button class="btn btn-primary btn-sm me-1" onclick="completeTask(${task.id})">
+                            <button class="btn btn-primary btn-sm me-1" onclick="event.stopPropagation(); completeTask(${task.id})">
                                 <i class="bi bi-check-lg"></i> 完了
                             </button>
                         ` : ''}
-                        <button class="btn btn-outline-secondary btn-sm me-1" onclick="toggleTaskDetails(${task.id})">
-                            <i class="bi bi-chevron-down"></i>
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="deleteTask(${task.id})">
+
+                        <button class="btn btn-outline-danger btn-sm" onclick="event.stopPropagation(); deleteTask(${task.id})">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
                 </div>
                 <div class="collapse mt-3" id="taskDetails${task.id}">
-                    <div class="collapse-content p-3">
+                    <div class="collapse-content p-3" onclick="event.stopPropagation();">
                         <div class="row">
                             <div class="col-md-6">
                                 <h6>サブタスク</h6>
                                 <div id="subtasks${task.id}">
                                     ${task.subtasks.map(subtask => `
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" 
-                                                   id="subtask${subtask.id}" ${subtask.done ? 'checked' : ''}
-                                                   onchange="updateSubtask(${task.id}, ${subtask.id}, this.checked)">
-                                            <label class="form-check-label" for="subtask${subtask.id}">
-                                                ${subtask.title}
-                                            </label>
+                                        <div class="subtask-item p-2 mb-2 border rounded">
+                                            <div class="d-flex align-items-center justify-content-between">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           id="subtask${subtask.id}" ${subtask.done ? 'checked' : ''}
+                                                           onchange="event.stopPropagation(); updateSubtask(${task.id}, ${subtask.id}, this.checked)"
+                                                           onclick="event.stopPropagation();">
+                                                    <label class="form-check-label" for="subtask${subtask.id}" onclick="event.stopPropagation(); showSubtaskTimer(${subtask.id})" style="cursor: pointer;">
+                                                        ${subtask.title}
+                                                    </label>
+                                                </div>
+                                                <div class="subtask-actions">
+                                                    ${subtask.status === 'todo' ? `
+                                                        <button class="btn btn-success btn-sm me-1" onclick="event.stopPropagation(); startSubtask(${subtask.id})">
+                                                            <i class="bi bi-play-fill"></i> 開始
+                                                        </button>
+                                                    ` : ''}
+                                                    ${subtask.status === 'doing' ? `
+                                                        <button class="btn btn-warning btn-sm me-1" onclick="event.stopPropagation(); pauseSubtask(${subtask.id})">
+                                                            <i class="bi bi-pause-fill"></i> 一時停止
+                                                        </button>
+                                                    ` : ''}
+                                                    ${subtask.status === 'paused' ? `
+                                                        <button class="btn btn-success btn-sm me-1" onclick="event.stopPropagation(); resumeSubtask(${subtask.id})">
+                                                            <i class="bi bi-play-fill"></i> 再開
+                                                        </button>
+                                                    ` : ''}
+                                                    ${(subtask.status === 'doing' || subtask.status === 'paused') ? `
+                                                        <button class="btn btn-warning btn-sm me-1" onclick="event.stopPropagation(); resetSubtaskTimer(${subtask.id})">
+                                                            <i class="bi bi-arrow-clockwise"></i> リセット
+                                                        </button>
+                                                    ` : ''}
+                                                    ${subtask.status !== 'done' ? `
+                                                        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); completeSubtask(${subtask.id})">
+                                                            <i class="bi bi-check-lg"></i> 完了
+                                                        </button>
+                                                    ` : ''}
+                                                </div>
+                                            </div>
+                                            ${subtask.status === 'doing' || subtask.status === 'paused' ? `
+                                                <div class="subtask-timer mt-2" onclick="event.stopPropagation();">
+                                                    <small class="text-muted">
+                                                        タイマー: <span id="subtaskTimer${subtask.id}">00:00:00</span>
+                                                        ${subtask.status === 'paused' ? ' <i class="bi bi-pause-fill"></i>' : ''}
+                                                    </small>
+                                                </div>
+                                            ` : ''}
                                         </div>
                                     `).join('')}
                                 </div>
-                            </div>
-                            <div class="col-md-6">
-                                <h6>メモ</h6>
-                                <textarea class="form-control" rows="3" placeholder="メモを入力..."></textarea>
+                                <!-- サブタスク追加フォーム -->
+                                <div class="mt-3">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="newSubtask${task.id}" 
+                                               placeholder="新しいサブタスクを入力"
+                                               onclick="event.stopPropagation();">
+                                        <button class="btn btn-outline-primary" onclick="event.stopPropagation(); addSubtask(${task.id})">
+                                            <i class="bi bi-plus-lg"></i> 追加
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -152,6 +232,16 @@ function renderTaskList() {
     }).join('');
     
     taskList.innerHTML = tasksHtml;
+    
+    // 記憶した詳細画面を再度開く
+    openDetails.forEach(taskId => {
+        setTimeout(() => {
+            const details = document.getElementById(`taskDetails${taskId}`);
+            if (details) {
+                const bsCollapse = new bootstrap.Collapse(details, { show: true });
+            }
+        }, 50);
+    });
 }
 
 // 今の一手カード更新
@@ -217,73 +307,226 @@ function updateFocusBar() {
     const focusBar = document.getElementById('focusBar');
     const focusTaskName = document.getElementById('focusTaskName');
     const focusTimer = document.getElementById('focusTimer');
+    const focusSubtaskBar = document.getElementById('focusSubtaskBar');
+    const focusSubtaskName = document.getElementById('focusSubtaskName');
+    const focusSubtaskTimer = document.getElementById('focusSubtaskTimer');
     
-    if (!state.running.taskId) {
+    // 何も実行中でない場合は非表示
+    if (!state.running.taskId && !state.runningSubtask.subtaskId) {
         focusBar.style.display = 'none';
         return;
     }
     
-    const task = state.tasks.find(t => t.id === state.running.taskId);
-    if (!task) return;
-    
     focusBar.style.display = 'block';
-    focusTaskName.textContent = task.title;
     
-    // タイマー更新
-    if (state.running.startedAt && !state.running.paused) {
-        const elapsed = Math.floor((Date.now() - new Date(state.running.startedAt).getTime()) / 1000);
-        focusTimer.textContent = formatTime(elapsed);
+    // サブタスクが実行中または一時停止中の場合はサブタスクを優先表示
+    if (state.runningSubtask.subtaskId) {
+        // サブタスク表示
+        focusSubtaskBar.style.display = 'block';
+        
+        let subtask = null;
+        for (const task of state.tasks) {
+            subtask = task.subtasks.find(s => s.id === state.runningSubtask.subtaskId);
+            if (subtask) break;
+        }
+        
+        if (subtask) {
+            focusSubtaskName.textContent = subtask.title;
+            
+            // タイマー更新
+            if (state.runningSubtask.startedAt) {
+                if (state.runningSubtask.paused) {
+                    // 一時停止状態では記録された経過時間を表示
+                    focusSubtaskTimer.classList.add('text-muted');
+                    focusSubtaskTimer.innerHTML = formatTime(state.runningSubtask.pausedSeconds) + ' <i class="bi bi-pause-fill"></i>';
+                } else {
+                    // 実行中はリアルタイムで更新
+                    const elapsed = Math.floor((Date.now() - new Date(state.runningSubtask.startedAt).getTime()) / 1000);
+                    focusSubtaskTimer.classList.remove('text-muted');
+                    focusSubtaskTimer.innerHTML = formatTime(elapsed);
+                }
+            }
+        }
+        
+        // タスク表示は非表示
+        focusTaskName.textContent = '';
+        focusTimer.innerHTML = '';
+        document.getElementById('focusStopBtn').style.display = 'none';
+        document.getElementById('focusStartBtn').style.display = 'none';
+        
+    } else if (state.running.taskId) {
+        // タスク表示
+        focusSubtaskBar.style.display = 'none';
+        
+        const task = state.tasks.find(t => t.id === state.running.taskId);
+        if (task) {
+            focusTaskName.textContent = task.title;
+            
+            // タイマー更新
+            if (state.running.startedAt) {
+                if (state.running.paused) {
+                    // 一時停止状態では記録された経過時間を表示
+                    focusTimer.classList.add('text-muted');
+                    focusTimer.innerHTML = formatTime(state.running.pausedSeconds) + ' <i class="bi bi-pause-fill"></i>';
+                    // ボタン表示を切り替え
+                    document.getElementById('focusStopBtn').style.display = 'none';
+                    document.getElementById('focusStartBtn').style.display = 'inline-block';
+                    
+                    // ボタンの文字を状況に応じて変更
+                    const startBtn = document.getElementById('focusStartBtn');
+                    if (state.running.pausedSeconds > 0) {
+                        startBtn.innerHTML = '<i class="bi bi-play-fill"></i> 再開';
+                    } else {
+                        startBtn.innerHTML = '<i class="bi bi-play-fill"></i> 開始';
+                    }
+                } else {
+                    // 実行中はリアルタイムで更新
+                    const elapsed = Math.floor((Date.now() - new Date(state.running.startedAt).getTime()) / 1000);
+                    focusTimer.classList.remove('text-muted');
+                    focusTimer.innerHTML = formatTime(elapsed);
+                    // ボタン表示を切り替え
+                    document.getElementById('focusStopBtn').style.display = 'inline-block';
+                    document.getElementById('focusStartBtn').style.display = 'none';
+                }
+            }
+        }
     }
 }
 
 // タイマー更新（requestAnimationFrame）
 function updateTimer() {
-    if (state.running.taskId && state.running.startedAt && !state.running.paused) {
+    if ((state.running.taskId && state.running.startedAt && !state.running.paused) ||
+        (state.runningSubtask.subtaskId && state.runningSubtask.startedAt && !state.runningSubtask.paused)) {
         updateFocusBar();
     }
     requestAnimationFrame(updateTimer);
 }
 
-// タスク操作
-async function startTask(taskId) {
-    try {
-        const response = await api(`/api/tasks/${taskId}/start/`, 'POST');
-        state.running.taskId = taskId;
-        state.running.startedAt = response.started_at;
-        state.running.paused = false;
-        
-        // タスク状態更新
-        const task = state.tasks.find(t => t.id === taskId);
-        if (task) {
-            task.status = 'doing';
-            task.started_at = response.started_at;
-        }
-        
-        renderTaskList();
-        updateFocusBar();
-    } catch (error) {
-        console.error('タスク開始エラー:', error);
-        alert('タスクの開始に失敗しました');
+// 既存の実行中のタスク/サブタスクを停止
+async function stopCurrentRunning(targetTaskId = null, targetSubtaskId = null) {
+    // 実行中のサブタスクがある場合は停止（対象と異なる場合のみ）
+    if (state.runningSubtask.subtaskId && state.runningSubtask.subtaskId !== targetSubtaskId) {
+        console.log('Stopping current subtask:', state.runningSubtask.subtaskId);
+        await pauseSubtask(state.runningSubtask.subtaskId);
+    }
+    
+    // 実行中のタスクがある場合は停止（対象と異なる場合のみ）
+    if (state.running.taskId && state.running.taskId !== targetTaskId) {
+        console.log('Stopping current task:', state.running.taskId);
+        await pauseTask(state.running.taskId);
     }
 }
 
-async function stopTask(taskId) {
+// タスク操作
+async function startTask(taskId) {
+    console.log('startTask called with taskId:', taskId);
     try {
-        const response = await api(`/api/tasks/${taskId}/stop/`, 'POST');
-        state.running.paused = true;
+        // 既存の実行中のタスク/サブタスクを停止
+        await stopCurrentRunning(taskId);
         
-        // タスク状態更新
-        const task = state.tasks.find(t => t.id === taskId);
-        if (task) {
-            task.status = 'todo';
-            task.started_at = null;
+        const response = await api(`/api/tasks/${taskId}/start/`, 'POST');
+        
+        // バックエンドからの応答を正しく処理
+        if (response.ok) {
+            state.running.taskId = taskId;
+            state.running.startedAt = response.started_at;
+            state.running.paused = false;
+            
+            console.log('Task started with start time:', state.running.startedAt);
+            
+            // タスク状態更新
+            const task = state.tasks.find(t => t.id === taskId);
+            if (task) {
+                task.status = 'doing';
+                task.started_at = response.started_at;
+            }
+            
+            renderTaskList();
+            updateFocusBar();
+        } else {
+            throw new Error(response.error || 'タスクの開始に失敗しました');
+        }
+    } catch (error) {
+        console.error('タスク開始エラー:', error);
+        alert('タスクの開始に失敗しました: ' + error.message);
+    }
+}
+
+async function pauseTask(taskId) {
+    try {
+        console.log('pauseTask called with taskId:', taskId);
+        
+        // 現在の経過時間を計算して記録
+        let currentElapsedSeconds = 0;
+        if (state.running.startedAt) {
+            const startTime = new Date(state.running.startedAt);
+            const now = new Date();
+            currentElapsedSeconds = Math.floor((now - startTime) / 1000);
         }
         
-        renderTaskList();
-        updateFocusBar();
+        console.log('Current elapsed time before pause:', currentElapsedSeconds, 'seconds');
+        
+        const response = await api(`/api/tasks/${taskId}/pause/`, 'POST');
+        
+        // バックエンドからの応答を正しく処理
+        if (response.ok) {
+            state.running.paused = true;
+            
+            // 一時停止時の経過時間を記録
+            state.running.pausedSeconds = currentElapsedSeconds;
+            
+            console.log('Paused at elapsed time:', currentElapsedSeconds, 'seconds');
+            
+            // タスク状態更新
+            const task = state.tasks.find(t => t.id === taskId);
+            if (task) {
+                task.status = 'paused';
+            }
+            
+            renderTaskList();
+            updateFocusBar();
+        } else {
+            throw new Error(response.error || 'タスクの一時停止に失敗しました');
+        }
     } catch (error) {
-        console.error('タスク停止エラー:', error);
-        alert('タスクの停止に失敗しました');
+        console.error('タスク一時停止エラー:', error);
+        alert('タスクの一時停止に失敗しました: ' + error.message);
+    }
+}
+
+async function resumeTask(taskId) {
+    try {
+        console.log('resumeTask called with taskId:', taskId);
+        
+        const response = await api(`/api/tasks/${taskId}/resume/`, 'POST');
+        
+        // バックエンドからの応答を正しく処理
+        if (response.ok) {
+            state.running.paused = false;
+            
+            // 記録された経過時間を使用して開始時間を調整
+            const now = new Date();
+            const adjustedStartTime = new Date(now.getTime() - (state.running.pausedSeconds * 1000));
+            state.running.startedAt = adjustedStartTime.toISOString();
+            
+            console.log('Resumed with elapsed time:', state.running.pausedSeconds, 'seconds');
+            console.log('Adjusted start time:', state.running.startedAt);
+            
+            // タスク状態更新
+            const task = state.tasks.find(t => t.id === taskId);
+            if (task) {
+                task.status = 'doing';
+                task.started_at = state.running.startedAt;
+            }
+            
+            renderTaskList();
+            updateFocusBar();
+        } else {
+            throw new Error(response.error || 'タスクの再開に失敗しました');
+        }
+    } catch (error) {
+        console.error('タスク再開エラー:', error);
+        alert('タスクの再開に失敗しました: ' + error.message);
     }
 }
 
@@ -296,6 +539,7 @@ async function completeTask(taskId) {
             state.running.taskId = null;
             state.running.startedAt = null;
             state.running.paused = false;
+            state.running.totalSeconds = 0;
         }
         
         // タスク状態更新
@@ -325,6 +569,7 @@ async function deleteTask(taskId) {
             state.running.taskId = null;
             state.running.startedAt = null;
             state.running.paused = false;
+            state.running.totalSeconds = 0;
         }
         
         // タスクリストから削除
@@ -346,6 +591,132 @@ function toggleTaskDetails(taskId) {
     }
 }
 
+// タスクタイマーリセット
+function resetTaskTimer(taskId) {
+    console.log('resetTaskTimer called with taskId:', taskId);
+    
+    if (!confirm('タイマーをリセットしますか？経過時間が0に戻ります。')) {
+        return;
+    }
+    
+    // 現在実行中のタスクの場合
+    if (state.running.taskId === taskId) {
+        state.running.startedAt = new Date().toISOString();
+        state.running.paused = true;
+        state.running.pausedSeconds = 0;
+        
+        // タスク状態更新
+        const task = state.tasks.find(t => t.id === taskId);
+        if (task) {
+            task.started_at = state.running.startedAt;
+        }
+        
+        renderTaskList();
+        updateFocusBar();
+    }
+}
+
+// タスクタイマー表示
+async function showTaskTimer(taskId) {
+    console.log('showTaskTimer called with taskId:', taskId);
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) {
+        console.log('Task not found:', taskId);
+        return;
+    }
+    
+    console.log('Task status:', task.status);
+    console.log('Current running task:', state.running.taskId);
+    
+    // タスクが実行中でない場合は、タイマー表示のみ（開始しない）
+    if (task.status !== 'doing') {
+        console.log('Task not running, showing timer display only');
+        
+        // 既存の実行中のタスク/サブタスクを停止
+        await stopCurrentRunning(taskId);
+        
+        // 詳細画面の状態を確認
+        const details = document.getElementById(`taskDetails${taskId}`);
+        let isDetailsOpen = false;
+        
+        if (details) {
+            // Bootstrapのcollapseインスタンスを取得
+            const bsCollapseInstance = bootstrap.Collapse.getInstance(details);
+            if (bsCollapseInstance) {
+                isDetailsOpen = bsCollapseInstance._isShown();
+            } else {
+                // インスタンスがない場合は、クラスとスタイルで判定
+                isDetailsOpen = details.classList.contains('show') || details.style.display !== 'none';
+            }
+        }
+        
+        console.log('Details element:', details);
+        console.log('Is details open:', isDetailsOpen);
+        
+        // 詳細画面が開いている場合は閉じる
+        if (isDetailsOpen) {
+            console.log('Details are open, closing them');
+            const bsCollapse = new bootstrap.Collapse(details, { hide: true });
+            return; // 詳細画面を閉じた後は何もしない
+        }
+        
+        // 前回の経過時間を計算
+        let totalElapsedSeconds = 0;
+        
+        // タスクの開始時間と完了時間から経過時間を計算
+        if (task.started_at) {
+            const startTime = new Date(task.started_at);
+            const endTime = task.completed_at ? new Date(task.completed_at) : new Date();
+            totalElapsedSeconds = Math.floor((endTime - startTime) / 1000);
+        }
+        
+        // FocusLogから実際の記録時間を取得
+        try {
+            const focusTimeResponse = await api(`/api/tasks/${taskId}/focus-time/`);
+            if (focusTimeResponse.ok) {
+                totalElapsedSeconds = focusTimeResponse.total_seconds;
+                console.log('Using actual focus time:', totalElapsedSeconds, 'seconds');
+            }
+        } catch (error) {
+            console.log('Could not fetch focus time, using calculated time:', totalElapsedSeconds, 'seconds');
+        }
+        
+        // タイマー表示用の状態を設定（実際には開始しない）
+        state.running.taskId = taskId;
+        // 現在時刻から経過時間を逆算して開始時間を設定
+        const now = new Date();
+        const adjustedStartTime = new Date(now.getTime() - (totalElapsedSeconds * 1000));
+        state.running.startedAt = adjustedStartTime.toISOString();
+        state.running.paused = true; // 一時停止状態で表示
+        
+        renderTaskList();
+        updateFocusBar();
+        
+        // 詳細画面を開く
+        if (details) {
+            const bsCollapse = new bootstrap.Collapse(details, { show: true });
+        }
+        
+        // ボタンの文字を状況に応じて更新
+        setTimeout(() => {
+            const startBtn = document.getElementById('focusStartBtn');
+            if (startBtn && totalElapsedSeconds > 0) {
+                startBtn.innerHTML = '<i class="bi bi-play-fill"></i> 再開';
+            } else if (startBtn) {
+                startBtn.innerHTML = '<i class="bi bi-play-fill"></i> 開始';
+            }
+        }, 100);
+    } else {
+        console.log('Task is running, toggling pause state');
+        // 既に実行中の場合は一時停止/再開を切り替え
+        if (state.running.paused) {
+            resumeTask(taskId);
+        } else {
+            pauseTask(taskId);
+        }
+    }
+}
+
 // サブタスク更新
 async function updateSubtask(taskId, subtaskId, done) {
     try {
@@ -362,6 +733,276 @@ async function updateSubtask(taskId, subtaskId, done) {
         });
     } catch (error) {
         console.error('サブタスク更新エラー:', error);
+    }
+}
+
+// サブタスク開始
+async function startSubtask(subtaskId) {
+    try {
+        console.log('startSubtask called with subtaskId:', subtaskId);
+        
+        // 既存の実行中のタスク/サブタスクを停止
+        await stopCurrentRunning(null, subtaskId);
+        
+        const response = await api(`/api/subtasks/${subtaskId}/start/`, 'POST');
+        
+        if (response.ok) {
+            state.runningSubtask.subtaskId = subtaskId;
+            state.runningSubtask.startedAt = response.started_at;
+            state.runningSubtask.paused = false;
+            
+            console.log('Subtask started with start time:', state.runningSubtask.startedAt);
+            
+            // サブタスク状態更新
+            updateSubtaskInState(subtaskId, 'doing', response.started_at);
+            
+            renderTaskList();
+            updateFocusBar();
+        } else {
+            throw new Error(response.error || 'サブタスクの開始に失敗しました');
+        }
+    } catch (error) {
+        console.error('サブタスク開始エラー:', error);
+        alert('サブタスクの開始に失敗しました: ' + error.message);
+    }
+}
+
+// サブタスク一時停止
+async function pauseSubtask(subtaskId) {
+    try {
+        console.log('pauseSubtask called with subtaskId:', subtaskId);
+        
+        // 現在の経過時間を計算して記録
+        let currentElapsedSeconds = 0;
+        if (state.runningSubtask.startedAt) {
+            const startTime = new Date(state.runningSubtask.startedAt);
+            const now = new Date();
+            currentElapsedSeconds = Math.floor((now - startTime) / 1000);
+        }
+        
+        console.log('Current elapsed time before pause:', currentElapsedSeconds, 'seconds');
+        
+        const response = await api(`/api/subtasks/${subtaskId}/pause/`, 'POST');
+        
+        if (response.ok) {
+            state.runningSubtask.paused = true;
+            
+            // 一時停止時の経過時間を記録
+            state.runningSubtask.pausedSeconds = currentElapsedSeconds;
+            
+            console.log('Paused at elapsed time:', currentElapsedSeconds, 'seconds');
+            
+            // サブタスク状態更新
+            updateSubtaskInState(subtaskId, 'paused', null);
+            
+            renderTaskList();
+            updateFocusBar();
+        } else {
+            throw new Error(response.error || 'サブタスクの一時停止に失敗しました');
+        }
+    } catch (error) {
+        console.error('サブタスク一時停止エラー:', error);
+        alert('サブタスクの一時停止に失敗しました: ' + error.message);
+    }
+}
+
+// サブタスク再開
+async function resumeSubtask(subtaskId) {
+    try {
+        console.log('resumeSubtask called with subtaskId:', subtaskId);
+        
+        // 現在の経過時間を計算
+        let currentElapsedSeconds = 0;
+        if (state.runningSubtask.startedAt) {
+            const startTime = new Date(state.runningSubtask.startedAt);
+            const now = new Date();
+            currentElapsedSeconds = Math.floor((now - startTime) / 1000);
+        }
+        
+        console.log('Current elapsed time before resume:', currentElapsedSeconds, 'seconds');
+        
+        const response = await api(`/api/subtasks/${subtaskId}/resume/`, 'POST');
+        
+        if (response.ok) {
+            state.runningSubtask.paused = false;
+            
+            // 記録された経過時間を使用して開始時間を調整
+            const now = new Date();
+            const adjustedStartTime = new Date(now.getTime() - (state.runningSubtask.pausedSeconds * 1000));
+            state.runningSubtask.startedAt = adjustedStartTime.toISOString();
+            
+            console.log('Resumed with elapsed time:', state.runningSubtask.pausedSeconds, 'seconds');
+            console.log('Adjusted start time:', state.runningSubtask.startedAt);
+            
+            // サブタスク状態更新
+            updateSubtaskInState(subtaskId, 'doing', state.runningSubtask.startedAt);
+            
+            renderTaskList();
+            updateFocusBar();
+        } else {
+            throw new Error(response.error || 'サブタスクの再開に失敗しました');
+        }
+    } catch (error) {
+        console.error('サブタスク再開エラー:', error);
+        alert('サブタスクの再開に失敗しました: ' + error.message);
+    }
+}
+
+// サブタスク完了
+async function completeSubtask(subtaskId) {
+    try {
+        const response = await api(`/api/subtasks/${subtaskId}/complete/`, 'POST');
+        
+        // 実行中なら停止
+        if (state.runningSubtask.subtaskId === subtaskId) {
+            state.runningSubtask.subtaskId = null;
+            state.runningSubtask.startedAt = null;
+            state.runningSubtask.paused = false;
+            state.runningSubtask.totalSeconds = 0;
+        }
+        
+        // サブタスク状態更新
+        updateSubtaskInState(subtaskId, 'done', null, response.completed_at);
+        
+        renderTaskList();
+        updateFocusBar();
+    } catch (error) {
+        console.error('サブタスク完了エラー:', error);
+        alert('サブタスクの完了に失敗しました');
+    }
+}
+
+// サブタスク状態更新ヘルパー
+function updateSubtaskInState(subtaskId, status, startedAt, completedAt = null) {
+    for (const task of state.tasks) {
+        const subtask = task.subtasks.find(s => s.id === subtaskId);
+        if (subtask) {
+            subtask.status = status;
+            subtask.started_at = startedAt;
+            if (completedAt) {
+                subtask.completed_at = completedAt;
+            }
+            break;
+        }
+    }
+}
+
+// サブタスクタイマーリセット
+function resetSubtaskTimer(subtaskId) {
+    console.log('resetSubtaskTimer called with subtaskId:', subtaskId);
+    
+    if (!confirm('サブタスクのタイマーをリセットしますか？経過時間が0に戻ります。')) {
+        return;
+    }
+    
+    // 現在実行中のサブタスクの場合
+    if (state.runningSubtask.subtaskId === subtaskId) {
+        state.runningSubtask.startedAt = new Date().toISOString();
+        state.runningSubtask.paused = true;
+        
+        // サブタスク状態更新
+        updateSubtaskInState(subtaskId, 'paused', state.runningSubtask.startedAt);
+        
+        renderTaskList();
+        updateFocusBar();
+    }
+}
+
+// サブタスクタイマー表示
+async function showSubtaskTimer(subtaskId) {
+    console.log('showSubtaskTimer called with subtaskId:', subtaskId);
+    
+    // サブタスクを検索
+    let subtask = null;
+    for (const task of state.tasks) {
+        subtask = task.subtasks.find(s => s.id === subtaskId);
+        if (subtask) break;
+    }
+    
+    if (!subtask) {
+        console.log('Subtask not found:', subtaskId);
+        return;
+    }
+    
+    console.log('Subtask status:', subtask.status);
+    console.log('Current running subtask:', state.runningSubtask.subtaskId);
+    
+    // 既存の実行中のタスク/サブタスクを停止
+    await stopCurrentRunning(null, subtaskId);
+    
+    // サブタスクが実行中でない場合は開始
+    if (subtask.status !== 'doing') {
+        console.log('Starting subtask:', subtaskId);
+        startSubtask(subtaskId);
+    } else {
+        console.log('Pausing subtask:', subtaskId);
+        pauseSubtask(subtaskId);
+    }
+}
+
+// サブタスク追加
+async function addSubtask(taskId) {
+    const input = document.getElementById(`newSubtask${taskId}`);
+    const title = input.value.trim();
+    
+    if (!title) {
+        alert('サブタスクのタイトルを入力してください');
+        return;
+    }
+    
+    try {
+        const task = state.tasks.find(t => t.id === taskId);
+        if (!task) return;
+        
+        // 既存のサブタスクと新しいサブタスクを分けて送信
+        const existingSubtasks = task.subtasks.map(s => ({ 
+            id: s.id, 
+            title: s.title,
+            done: s.done 
+        }));
+        
+        // 新しいサブタスク（idなし）
+        const newSubtaskData = {
+            title: title,
+            done: false
+        };
+        
+        // APIで保存
+        const response = await api(`/api/subtasks/${taskId}/bulk_upsert/`, 'POST', {
+            subtasks: [...existingSubtasks, newSubtaskData]
+        });
+        
+        if (response.ok) {
+            // バックエンドから返された新しいIDでサブタスクを更新
+            const newSubtask = {
+                id: response.items[response.items.length - 1].id, // 最後に追加されたサブタスクのID
+                title: title,
+                done: false,
+                status: 'todo',
+                started_at: null,
+                completed_at: null
+            };
+            
+            task.subtasks.push(newSubtask);
+            
+            // 入力フィールドをクリア
+            input.value = '';
+            
+            // タスクリストを再描画
+            renderTaskList();
+            
+            // 詳細画面を再度開く
+            setTimeout(() => {
+                const details = document.getElementById(`taskDetails${taskId}`);
+                if (details) {
+                    const bsCollapse = new bootstrap.Collapse(details, { show: true });
+                }
+            }, 100);
+        }
+        
+    } catch (error) {
+        console.error('サブタスク追加エラー:', error);
+        alert('サブタスクの追加に失敗しました');
     }
 }
 
@@ -416,9 +1057,35 @@ async function loadMetrics() {
 // タスクリスト読み込み
 async function loadTasks() {
     try {
+        console.log('Loading tasks...');
         const response = await api('/api/tasks/');
         state.tasks = response.tasks;
+        console.log('Loaded tasks:', state.tasks);
+        
+        // 実行中のタスクがあれば、タイマー状態を復元
+        const runningTask = state.tasks.find(task => task.status === 'doing' && task.started_at);
+        if (runningTask) {
+            console.log('Found running task:', runningTask);
+            state.running.taskId = runningTask.id;
+            state.running.startedAt = runningTask.started_at;
+            state.running.paused = false;
+        }
+        
+        // 実行中のサブタスクがあれば、タイマー状態を復元
+        for (const task of state.tasks) {
+            const runningSubtask = task.subtasks.find(subtask => subtask.status === 'doing' && subtask.started_at);
+            if (runningSubtask) {
+                console.log('Found running subtask:', runningSubtask);
+                state.runningSubtask.subtaskId = runningSubtask.id;
+                state.runningSubtask.startedAt = runningSubtask.started_at;
+                state.runningSubtask.paused = false;
+                break;
+            }
+        }
+        
+        console.log('Final state:', state);
         renderTaskList();
+        updateFocusBar();
     } catch (error) {
         console.error('タスク読み込みエラー:', error);
     }
@@ -654,20 +1321,44 @@ document.addEventListener('DOMContentLoaded', function() {
     // 固定バーのボタン
     document.getElementById('focusStopBtn')?.addEventListener('click', () => {
         if (state.running.taskId) {
-            if (state.running.paused) {
-                // 再開
-                state.running.paused = false;
-                state.running.startedAt = new Date().toISOString();
-            } else {
-                // 停止
-                stopTask(state.running.taskId);
-            }
+            pauseTask(state.running.taskId);
+        }
+    });
+    
+    document.getElementById('focusStartBtn')?.addEventListener('click', () => {
+        if (state.running.taskId) {
+            resumeTask(state.running.taskId);
+        }
+    });
+    
+    document.getElementById('focusResetBtn')?.addEventListener('click', () => {
+        if (state.running.taskId) {
+            resetTaskTimer(state.running.taskId);
         }
     });
     
     document.getElementById('focusCompleteBtn')?.addEventListener('click', () => {
         if (state.running.taskId) {
             completeTask(state.running.taskId);
+        }
+    });
+    
+    // サブタスク固定バーのボタン
+    document.getElementById('focusSubtaskStopBtn')?.addEventListener('click', () => {
+        if (state.runningSubtask.subtaskId) {
+            if (state.runningSubtask.paused) {
+                // 再開
+                resumeSubtask(state.runningSubtask.subtaskId);
+            } else {
+                // 一時停止
+                pauseSubtask(state.runningSubtask.subtaskId);
+            }
+        }
+    });
+    
+    document.getElementById('focusSubtaskCompleteBtn')?.addEventListener('click', () => {
+        if (state.runningSubtask.subtaskId) {
+            completeSubtask(state.runningSubtask.subtaskId);
         }
     });
 });

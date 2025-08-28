@@ -34,6 +34,7 @@ class Task(models.Model):
         choices=[
             ('todo', 'todo'),
             ('doing', 'doing'),
+            ('paused', 'paused'),
             ('done', 'done')
         ]
     )
@@ -53,6 +54,18 @@ class SubTask(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="subtasks")
     title = models.CharField(max_length=200)
     done = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=10, 
+        default="todo",
+        choices=[
+            ('todo', 'todo'),
+            ('doing', 'doing'),
+            ('paused', 'paused'),
+            ('done', 'done')
+        ]
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -64,14 +77,16 @@ class SubTask(models.Model):
 
 class FocusLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, null=True, blank=True)
+    subtask = models.ForeignKey(SubTask, on_delete=models.CASCADE, null=True, blank=True)
     started_at = models.DateTimeField()
     stopped_at = models.DateTimeField()
     seconds = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.task.title} ({self.seconds}s)"
+        task_name = self.task.title if self.task else self.subtask.title
+        return f"{self.user.username} - {task_name} ({self.seconds}s)"
 
 
 class DiagnosisAnswer(models.Model):

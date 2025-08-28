@@ -7,6 +7,7 @@ urlpatterns = [
     # ページ
     path('', views.home, name='home'),
     path('analytics/', views.analytics, name='analytics'),
+    path('logout/', views.logout_view, name='logout'),
     
     # API
     path('api/tasks/', views.api_tasks, name='api_tasks'),
@@ -14,8 +15,14 @@ urlpatterns = [
     path('api/tasks/<int:task_id>/update/', views.api_task_update, name='api_task_update'),
     path('api/tasks/<int:task_id>/delete/', views.api_task_delete, name='api_task_delete'),
     path('api/tasks/<int:task_id>/start/', views.api_task_start, name='api_task_start'),
-    path('api/tasks/<int:task_id>/stop/', views.api_task_stop, name='api_task_stop'),
+    path('api/tasks/<int:task_id>/pause/', views.api_task_pause, name='api_task_pause'),
+    path('api/tasks/<int:task_id>/resume/', views.api_task_resume, name='api_task_resume'),
     path('api/tasks/<int:task_id>/complete/', views.api_task_complete, name='api_task_complete'),
+    
+    path('api/subtasks/<int:subtask_id>/start/', views.api_subtask_start, name='api_subtask_start'),
+    path('api/subtasks/<int:subtask_id>/pause/', views.api_subtask_pause, name='api_subtask_pause'),
+    path('api/subtasks/<int:subtask_id>/resume/', views.api_subtask_resume, name='api_subtask_resume'),
+    path('api/subtasks/<int:subtask_id>/complete/', views.api_subtask_complete, name='api_subtask_complete'),
     
     path('api/subtasks/<int:task_id>/bulk_upsert/', views.api_subtasks_bulk_upsert, name='api_subtasks_bulk_upsert'),
     
@@ -23,4 +30,5 @@ urlpatterns = [
     path('api/profile/', views.api_profile, name='api_profile'),
     path('api/profile/update/', views.api_profile_update, name='api_profile_update'),
     path('api/metrics/summary/', views.api_metrics_summary, name='api_metrics_summary'),
+    path('api/tasks/<int:task_id>/focus-time/', views.api_task_focus_time, name='api_task_focus_time'),
 ]
