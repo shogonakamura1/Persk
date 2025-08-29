@@ -15,6 +15,8 @@ class UserProfile(models.Model):
         blank=True
     )
     sub_type = models.CharField(max_length=16, null=True, blank=True)
+    auto_sort = models.BooleanField(default=False)  # 初期=手動
+    archive_after_days = models.IntegerField(default=30)  # 超過アーカイブ日数
     settings_json = models.JSONField(default=dict)
 
     def __str__(self):
@@ -24,10 +26,10 @@ class UserProfile(models.Model):
 class Task(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
-    deadline = models.DateTimeField(null=True, blank=True)
-    estimate_min = models.IntegerField(default=0)
+    deadline = models.DateTimeField()  # 必須化
+    estimate_min = models.IntegerField()  # 必須化、>=5
     tags = models.CharField(max_length=200, blank=True)
-    importance = models.IntegerField(default=0)  # 0-3
+    importance = models.IntegerField()  # 必須化、0-3
     status = models.CharField(
         max_length=10, 
         default="todo",
@@ -53,6 +55,7 @@ class Task(models.Model):
 class SubTask(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="subtasks")
     title = models.CharField(max_length=200)
+    estimate_min = models.IntegerField(default=15)  # 必須化、>=5、デフォルト15分
     done = models.BooleanField(default=False)
     status = models.CharField(
         max_length=10, 
@@ -66,13 +69,14 @@ class SubTask(models.Model):
     )
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    order_index = models.IntegerField(default=0)  # 親内の手動順（自動ソート対象外）
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.task.title} - {self.title}"
 
     class Meta:
-        ordering = ['created_at']
+        ordering = ['order_index', 'created_at']
 
 
 class FocusLog(models.Model):
@@ -87,6 +91,21 @@ class FocusLog(models.Model):
     def __str__(self):
         task_name = self.task.title if self.task else self.subtask.title
         return f"{self.user.username} - {task_name} ({self.seconds}s)"
+
+
+class SortLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    type = models.CharField(max_length=16)  # 'planner'|'sprinter'|'flow'
+    mode = models.CharField(max_length=8)   # 'auto'|'manual'
+    sorted_at = models.DateTimeField()
+    item_count = models.IntegerField()
+    top_ids = models.JSONField()  # 上位ID配列（デバッグ）
+
+    def __str__(self):
+        return f"{self.user.username} - {self.type} ({self.mode}) at {self.sorted_at}"
+
+    class Meta:
+        ordering = ['-sorted_at']
 
 
 class DiagnosisAnswer(models.Model):

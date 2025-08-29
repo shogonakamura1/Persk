@@ -31,4 +31,10 @@ urlpatterns = [
     path('api/profile/update/', views.api_profile_update, name='api_profile_update'),
     path('api/metrics/summary/', views.api_metrics_summary, name='api_metrics_summary'),
     path('api/tasks/<int:task_id>/focus-time/', views.api_task_focus_time, name='api_task_focus_time'),
+    
+    # 新しいソート関連API
+    path('api/tasks/sorted/', views.api_tasks_sorted, name='api_tasks_sorted'),
+    path('api/tasks/recompute-order/', views.api_recompute_order, name='api_recompute_order'),
+    path('api/user/sort-settings/', views.api_sort_settings, name='api_sort_settings'),
+    path('api/subtasks/create/', views.api_subtask_create, name='api_subtask_create'),
 ]

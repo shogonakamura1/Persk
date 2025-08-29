@@ -63,9 +63,28 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0">タスク一覧</h5>
-                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#taskModal">
-                    <i class="bi bi-plus-lg"></i> 新規タスク
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <!-- ソートUI -->
+                    <div class="btn-group" role="group">
+                        <select id="sortTypeSelect" class="form-select form-select-sm" style="width: auto;">
+                            <option value="planner">Planner</option>
+                            <option value="sprinter">Sprinter</option>
+                            <option value="flow">Flow</option>
+                        </select>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="autoSortToggle">
+                        <label class="form-check-label" for="autoSortToggle">
+                            自動ソート
+                        </label>
+                    </div>
+                    <button id="sortNowBtn" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-clockwise"></i> ソート更新
+                    </button>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#taskModal">
+                        <i class="bi bi-plus-lg"></i> 新規タスク
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <div id="taskList">
@@ -185,6 +204,38 @@
         </div>
     </div>
 </div>
+
+<!-- SubTask Modal -->
+<div class="modal fade" id="subtaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">サブタスク作成</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="subtaskForm">
+                    <div class="mb-3">
+                        <label for="subtaskTitle" class="form-label">タイトル</label>
+                        <input type="text" class="form-control" id="subtaskTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="subtaskEstimate" class="form-label">見積時間（分）</label>
+                        <input type="number" class="form-control" id="subtaskEstimate" min="5" value="15" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="subtaskOrderIndex" class="form-label">順序</label>
+                        <input type="number" class="form-control" id="subtaskOrderIndex" min="0" value="0">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary" id="saveSubtaskBtn">作成</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_css %}
@@ -246,6 +297,61 @@
 
 .task-item:hover .task-actions {
     opacity: 1;
+}
+
+/* ドラッグアンドドロップ用スタイル */
+.task-drag-handle {
+    cursor: grab;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.task-drag-handle:hover {
+    opacity: 1;
+}
+
+.task-drag-handle:active {
+    cursor: grabbing;
+}
+
+.sortable-ghost {
+    opacity: 0.5;
+    background-color: #f8f9fa;
+    border: 2px dashed #007bff;
+}
+
+.sortable-chosen {
+    background-color: #e3f2fd;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.sortable-drag {
+    opacity: 0.8;
+    transform: rotate(5deg);
+}
+
+/* 重要度バッジ用スタイル */
+.importance-badge {
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 0.2rem 0.4rem;
+    margin-right: 0.5rem;
+    vertical-align: middle;
+}
+
+.task-actions .badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* ソート済みボタン用スタイル */
+.btn-outline-secondary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-outline-secondary:disabled:hover {
+    opacity: 0.6;
 }
 
 .diagnosis-question {
