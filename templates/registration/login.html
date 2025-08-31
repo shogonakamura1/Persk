@@ -95,6 +95,7 @@ body {
     align-items: center;
     justify-content: center;
     padding: 2rem;
+    margin-top: -8rem;
 }
 
 .login-card {
@@ -251,14 +252,12 @@ body {
     <!-- ヘッダー -->
     <div class="login-header">
         <div class="header-left">
-            <div class="app-title">
-                Persk タスク管理アプリケーション
-            </div>
+            <!-- 左上の文字を削除 -->
         </div>
         <div class="header-right">
-            <a href="#" class="help-icon">
+            <div class="help-icon" id="helpIcon">
                 <i class="bi bi-question"></i>
-            </a>
+            </div>
             
         </div>
     </div>
@@ -316,4 +315,37 @@ body {
         </div>
     </div>
 </div>
+
+<script>
+// カスタムツールチップ
+document.addEventListener('DOMContentLoaded', function() {
+    var helpIcon = document.getElementById('helpIcon');
+    if (helpIcon) {
+        helpIcon.addEventListener('mouseenter', function() {
+            // 既存のツールチップを削除
+            var existingTooltip = document.querySelector('.custom-tooltip');
+            if (existingTooltip) {
+                existingTooltip.remove();
+            }
+            
+            // 新しいツールチップを作成
+            var tooltip = document.createElement('div');
+            tooltip.className = 'custom-tooltip';
+            tooltip.innerHTML = 'Perskは、あなたの作業スタイルに合わせてタスクを最適化するAI搭載タスク管理アプリです。効率的な時間管理で、より良い成果を実現しましょう。';
+            tooltip.style.cssText = 'position: absolute; background: rgba(0,0,0,0.9); color: white; padding: 12px; border-radius: 8px; font-size: 14px; z-index: 10000; max-width: 300px; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); line-height: 1.4;';
+            
+            // ヘルプアイコンの位置を相対に設定
+            this.style.position = 'relative';
+            this.appendChild(tooltip);
+        });
+        
+        helpIcon.addEventListener('mouseleave', function() {
+            var tooltip = this.querySelector('.custom-tooltip');
+            if (tooltip) {
+                tooltip.remove();
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

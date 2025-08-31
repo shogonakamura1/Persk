@@ -219,10 +219,11 @@ body {
 <script>
 let timelineCursor = null;
 let isLoading = false;
+let hasMoreData = true;
 
 // Timeline読み込み
 function loadTimeline() {
-    if (isLoading) return;
+    if (isLoading || !hasMoreData) return;
     
     isLoading = true;
     document.getElementById('timelineLoading').style.display = 'block';
@@ -243,6 +244,16 @@ function loadTimeline() {
         if (data.items && data.items.length > 0) {
             renderTimelineItems(data.items);
             timelineCursor = data.next_cursor;
+            
+            // 次のカーソルがない場合は、これ以上データがないことを示す
+            if (!data.next_cursor) {
+                hasMoreData = false;
+                console.log('No more timeline data available');
+            }
+        } else {
+            // データがない場合は、これ以上データがないことを示す
+            hasMoreData = false;
+            console.log('No timeline data received');
         }
     })
     .catch(error => {
@@ -309,15 +320,34 @@ function getKindText(kind, item) {
         // 共有イベントの場合は特別な表示
         const taskTitle = item.task_title || 'タスク';
         const estimateMin = item.estimate_min || 0;
-        return `${taskTitle}\nかかった時間: ${estimateMin}分`;
+        const importance = item.importance || 0;
+        const username = item.username || 'ユーザー';
+        
+        // 重要度に応じた絵文字を追加
+        const importanceEmoji = importance >= 3 ? '🔥' : importance >= 2 ? '⚡' : importance >= 1 ? '📌' : '📝';
+        
+        // ランダムな励ましメッセージ
+        const encouragementMessages = [
+            'みんなも頑張ろう！ 💪',
+            '素晴らしい成果ですね！ 🌟',
+            '次はあなたの番です！ 🚀',
+            'チームワークで頑張りましょう！ 🤝',
+            '一歩ずつ進んでいきましょう！ 👣',
+            'みんなで一緒に成長しましょう！ 🌱',
+            '今日も一日頑張りましょう！ ☀️',
+            '小さな進歩も大きな成果です！ ✨'
+        ];
+        const randomMessage = encouragementMessages[Math.floor(Math.random() * encouragementMessages.length)];
+        
+        return `${username}さんがタスクを終わらせました！！ 🎉\n${importanceEmoji} ${taskTitle}\n⏱️ かかった時間: ${estimateMin}分\n${randomMessage}`;
     }
     
     const kindMap = {
-        'task_start': 'タスクを開始しました',
-        'task_stop': 'タスクを一時停止しました',
-        'task_complete': 'タスクを完了しました',
-        'subtask_start': 'サブタスクを開始しました',
-        'subtask_complete': 'サブタスクを完了しました'
+        'task_start': '🚀 タスクを開始しました',
+        'task_stop': '⏸️ タスクを一時停止しました',
+        'task_complete': '🎉 タスクを完了しました！お疲れ様でした！',
+        'subtask_start': '▶️ サブタスクを開始しました',
+        'subtask_complete': '✅ サブタスクを完了しました'
     };
     return kindMap[kind] || kind;
 }
@@ -351,7 +381,7 @@ function toggleLike(eventId) {
     })
     .catch(error => {
         console.error('いいねエラー:', error);
-        showToast('いいねの処理に失敗しました', 'error');
+        showToast('😅 いいねの処理に失敗しました。もう一度お試しください！', 'error');
     });
 }
 
@@ -376,18 +406,18 @@ function deleteTimelineItem(eventId) {
             setTimeout(() => {
                 item.remove();
             }, 300);
-            showToast('イベントを削除しました', 'success');
+            showToast('🗑️ イベントを削除しました', 'success');
         }
     })
     .catch(error => {
         console.error('削除エラー:', error);
-        showToast('削除に失敗しました', 'error');
+        showToast('😅 削除に失敗しました。もう一度お試しください！', 'error');
     });
 }
 
 // 無限スクロール
 function handleScroll() {
-    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 1000) {
+    if (hasMoreData && (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 1000) {
         loadTimeline();
     }
 }

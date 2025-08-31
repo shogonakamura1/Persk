@@ -282,38 +282,46 @@ function renderTaskList() {
         console.log(`タスク ${task.id} のタグHTML:`, tagsHtml);
         
         return `
-            <div class="task-card ${priorityClass}" data-task-id="${task.id}">
-                <div class="task-content">
-                    <div class="task-checkbox">
-                        <input type="checkbox" ${task.status === 'done' ? 'checked' : ''} 
-                               onchange="toggleTaskStatus(${task.id}, this.checked)">
-                    </div>
-                    <div class="task-info">
-                        <div class="task-title">${task.title}</div>
-                        ${tags.length > 0 ? `<div class="task-tags">${tagsHtml}</div>` : ''}
-                        <div class="task-meta">
-                            ${task.deadline ? `
-                                <div class="task-date">
-                                    <i class="bi bi-calendar"></i>
-                                    ${new Date(task.deadline).toLocaleDateString('ja-JP')}
-                                    ${formatDeadlineDisplay(task.deadline)}
-                                </div>
-                            ` : ''}
-                            ${task.estimate_min > 0 ? `
-                                <div class="task-time">
-                                    <i class="bi bi-clock"></i>
-                                    ${task.status === 'done' ? `<span id="actualTime${task.id}">${task.estimate_min}分</span>` : `${task.estimate_min}分`}
-                                </div>
-                            ` : ''}
-                            ${(task.status === 'doing' || task.status === 'paused') ? `
-                                <div class="task-timer">
-                                    <i class="bi bi-stopwatch"></i>
-                                    <span id="taskTimer${task.id}">00:00:00</span>
-                                </div>
-                            ` : ''}
+            <div class="task-card ${priorityClass} task-item" data-task-id="${task.id}">
+                <div class="task-content" onclick="toggleTaskDetails(${task.id})" style="cursor: pointer;">
+                    <div class="d-flex align-items-center flex-grow-1">
+                        <div class="task-drag-handle me-2" style="cursor: grab; color: #ccc;" onclick="event.stopPropagation();">
+                            <i class="bi bi-grip-vertical"></i>
+                        </div>
+                        <div class="task-checkbox" onclick="event.stopPropagation();">
+                            <input type="checkbox" ${task.status === 'done' ? 'checked' : ''} 
+                                   onchange="toggleTaskStatus(${task.id}, this.checked)">
+                        </div>
+                        <div class="task-info flex-grow-1 ms-3">
+                            <div class="task-title">${task.title}</div>
+                            <div class="task-meta-info d-flex align-items-center gap-2">
+                                ${getImportanceBadge(task.importance)}
+                                ${tags.length > 0 ? `<div class="task-tags">${tagsHtml}</div>` : ''}
+                            </div>
+                            <div class="task-meta">
+                                ${task.deadline ? `
+                                    <div class="task-date">
+                                        <i class="bi bi-calendar"></i>
+                                        ${new Date(task.deadline).toLocaleDateString('ja-JP')}
+                                        ${formatDeadlineDisplay(task.deadline)}
+                                    </div>
+                                ` : ''}
+                                ${task.estimate_min > 0 ? `
+                                    <div class="task-time">
+                                        <i class="bi bi-clock"></i>
+                                        ${task.status === 'done' ? `<span id="actualTime${task.id}">${task.estimate_min}分</span>` : `${task.estimate_min}分`}
+                                    </div>
+                                ` : ''}
+                                ${(task.status === 'doing' || task.status === 'paused') ? `
+                                    <div class="task-timer">
+                                        <i class="bi bi-stopwatch"></i>
+                                        <span id="taskTimer${task.id}">00:00:00</span>
+                                    </div>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
-                    <div class="task-actions" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                    <div class="task-actions" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important; flex-shrink: 0;">
                         ${task.status === 'todo' ? `
                             <button class="task-action-btn" onclick="event.stopPropagation(); startTask(${task.id})" title="開始" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
                                 <i class="bi bi-play-fill"></i>
@@ -363,17 +371,19 @@ function renderTaskList() {
                                 </div>
                                 <div id="subtasks${task.id}">
                                     ${task.subtasks.map(subtask => `
-                                        <div class="subtask-item p-2 mb-2 border rounded">
-                                            <div class="d-flex align-items-center justify-content-between">
+                                        <div class="subtask-item">
+                                            <div class="d-flex align-items-center">
                                                 <div class="form-check">
                                                     <input class="form-check-input" type="checkbox" 
                                                            id="subtask${subtask.id}" ${subtask.done ? 'checked' : ''}
                                                            onchange="event.stopPropagation(); updateSubtask(${task.id}, ${subtask.id}, this.checked)"
                                                            onclick="event.stopPropagation();">
-                                                    <label class="form-check-label" for="subtask${subtask.id}" onclick="event.stopPropagation(); showSubtaskTimer(${subtask.id})" style="cursor: pointer;">
+                                                    <label class="form-check-label" for="subtask${subtask.id}" onclick="event.stopPropagation();" style="cursor: pointer;">
                                                         ${subtask.title}
                                                     </label>
                                                 </div>
+                                            </div>
+                                                <!-- サブタスクタイマー機能を一時無効化
                                                 <div class="subtask-actions">
                                                     ${subtask.status === 'todo' ? `
                                                         <button class="btn btn-success btn-sm me-1" onclick="event.stopPropagation(); startSubtask(${subtask.id})">
@@ -401,7 +411,9 @@ function renderTaskList() {
                                                         </button>
                                                     ` : ''}
                                                 </div>
+                                                -->
                                             </div>
+                                            <!-- サブタスクタイマー表示を一時無効化
                                             ${subtask.status === 'doing' || subtask.status === 'paused' ? `
                                                 <div class="subtask-timer mt-2" onclick="event.stopPropagation();">
                                                     <small class="text-muted">
@@ -410,19 +422,18 @@ function renderTaskList() {
                                                     </small>
                                                 </div>
                                             ` : ''}
+                                            -->
                                         </div>
                                     `).join('')}
                                 </div>
                                 <!-- サブタスク追加フォーム -->
-                                <div class="mt-3">
-                                    <div class="input-group">
-                                        <input type="text" class="form-control" id="newSubtask${task.id}" 
-                                               placeholder="新しいサブタスクを入力"
-                                               onclick="event.stopPropagation();">
-                                        <button class="btn btn-outline-primary" onclick="event.stopPropagation(); addSubtask(${task.id})">
-                                            <i class="bi bi-plus-lg"></i> 追加
-                                        </button>
-                                    </div>
+                                <div class="input-group mt-3">
+                                    <input type="text" class="form-control" id="newSubtask${task.id}" 
+                                           placeholder="新しいサブタスクを入力"
+                                           onclick="event.stopPropagation();">
+                                    <button class="btn subtask-add-btn" onclick="event.stopPropagation(); addSubtask(${task.id})">
+                                        <i class="bi bi-plus-lg"></i> 追加
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -453,14 +464,19 @@ function renderTaskList() {
         }, 50);
     });
     
-    // ドラッグハンドルを追加
-    addDragHandles();
-    
     // Sortableを再初期化
     initializeSortable();
     
     // 完了済みタスクの実際の時間を更新
     updateCompletedTaskTimes();
+    
+    // ソート設定を更新
+    updateSortUI();
+    
+    // ドラッグ&ドロップ機能を再初期化
+    setTimeout(() => {
+        initializeSortable();
+    }, 100);
 }
 
 // 今の一手カード更新
@@ -546,11 +562,16 @@ async function stopCurrentRunning(targetTaskId = null, targetSubtaskId = null) {
 // タスク操作
 async function startTask(taskId) {
     console.log('startTask called with taskId:', taskId);
+    console.log('Current state:', state);
+    
     try {
         // 既存の実行中のタスク/サブタスクを停止
+        console.log('Stopping current running tasks...');
         await stopCurrentRunning(taskId);
         
+        console.log('Making API call to start task...');
         const response = await api(`/api/tasks/${taskId}/start/`, 'POST');
+        console.log('API response:', response);
         
         // バックエンドからの応答を正しく処理
         if (response.ok) {
@@ -559,20 +580,27 @@ async function startTask(taskId) {
             state.running.paused = false;
             
             console.log('Task started with start time:', state.running.startedAt);
+            console.log('Updated state:', state);
             
             // タスク状態更新
             const task = state.tasks.find(t => t.id === taskId);
             if (task) {
                 task.status = 'doing';
                 task.started_at = response.started_at;
+                console.log('Updated task:', task);
+            } else {
+                console.error('Task not found in state:', taskId);
             }
             
-            renderTaskList();
+            console.log('Updating task buttons...');
+            updateTaskButtons(taskId);
+            console.log('Task buttons updated');
         } else {
             throw new Error(response.error || 'タスクの開始に失敗しました');
         }
     } catch (error) {
         console.error('タスク開始エラー:', error);
+        console.error('Error stack:', error.stack);
         alert('タスクの開始に失敗しました: ' + error.message);
     }
 }
@@ -606,6 +634,12 @@ async function pauseTask(taskId) {
             const task = state.tasks.find(t => t.id === taskId);
             if (task) {
                 task.status = 'paused';
+            }
+            
+            // タイマー表示を即座に更新（0を表示しないように）
+            const timerElement = document.getElementById(`taskTimer${taskId}`);
+            if (timerElement) {
+                timerElement.textContent = formatTime(currentElapsedSeconds);
             }
             
             // ボタンの表示を更新
@@ -642,6 +676,12 @@ async function resumeTask(taskId) {
             if (task) {
                 task.status = 'doing';
                 task.started_at = state.running.startedAt;
+            }
+            
+            // タイマー表示を即座に更新（0を表示しないように）
+            const timerElement = document.getElementById(`taskTimer${taskId}`);
+            if (timerElement) {
+                timerElement.textContent = formatTime(state.running.pausedSeconds || 0);
             }
             
             // ボタンの表示を更新
@@ -740,15 +780,31 @@ function toggleTaskDetails(taskId) {
 
 // タスクボタンの表示を更新
 function updateTaskButtons(taskId) {
+    console.log('updateTaskButtons called with taskId:', taskId);
+    
     const task = state.tasks.find(t => t.id === taskId);
-    if (!task) return;
+    if (!task) {
+        console.error('Task not found in state:', taskId);
+        return;
+    }
     
     // タスクカード内のアクションボタンを更新
     const taskCard = document.querySelector(`[data-task-id="${taskId}"]`);
-    if (!taskCard) return;
+    if (!taskCard) {
+        console.error('Task card not found in DOM:', taskId);
+        return;
+    }
+    
+    // タスクのメタ情報を更新
+    updateTaskMeta(taskCard, task);
     
     const actionsContainer = taskCard.querySelector('.task-actions');
-    if (!actionsContainer) return;
+    if (!actionsContainer) {
+        console.error('Task actions container not found:', taskId);
+        return;
+    }
+    
+    console.log('Found actions container, updating buttons...');
     
     // サブタスクの有無を確認
     const hasSubtasks = task.subtasks && task.subtasks.length > 0;
@@ -819,6 +875,111 @@ function updateTaskButtons(taskId) {
             </button>
         `;
     }
+    
+    console.log('Task buttons updated successfully');
+}
+
+// タスクのメタ情報を更新
+function updateTaskMeta(taskCard, task) {
+    const metaContainer = taskCard.querySelector('.task-meta');
+    if (!metaContainer) {
+        console.error('Task meta container not found');
+        return;
+    }
+    
+    // タグ情報を取得
+    const tags = task.tags ? task.tags.split(',').map(tag => tag.trim()) : [];
+    const tagsHtml = tags.map(tag => {
+        const tagClass = tag.toLowerCase().includes('デザイン') || tag.toLowerCase().includes('重要') ? 'tag-design' :
+                       tag.toLowerCase().includes('会議') ? 'tag-meeting' :
+                       tag.toLowerCase().includes('開発') || tag.toLowerCase().includes('技術') ? 'tag-development' : 'tag-design';
+        return `<span class="task-tag ${tagClass}">${tag}</span>`;
+    }).join('');
+    
+    // 既存のタイマー要素を保存
+    const existingTimer = metaContainer.querySelector('.task-timer');
+    const existingTimerText = existingTimer ? existingTimer.textContent : null;
+    
+    // メタ情報のHTMLを生成
+    let metaHtml = '';
+    
+    if (task.deadline) {
+        metaHtml += `
+            <div class="task-date">
+                <i class="bi bi-calendar"></i>
+                ${new Date(task.deadline).toLocaleDateString('ja-JP')}
+                ${formatDeadlineDisplay(task.deadline)}
+            </div>
+        `;
+    }
+    
+    if (task.estimate_min > 0) {
+        metaHtml += `
+            <div class="task-time">
+                <i class="bi bi-clock"></i>
+                ${task.status === 'done' ? `<span id="actualTime${task.id}">${task.estimate_min}分</span>` : `${task.estimate_min}分`}
+            </div>
+        `;
+    }
+    
+    if (task.status === 'doing' || task.status === 'paused') {
+        // 既存のタイマーがある場合は、その値を保持
+        if (existingTimer && existingTimerText) {
+            metaHtml += `
+                <div class="task-timer">
+                    <i class="bi bi-stopwatch"></i>
+                    <span id="taskTimer${task.id}">${existingTimerText}</span>
+                </div>
+            `;
+        } else {
+            // 新しいタイマーの場合は、現在の経過時間を計算
+            let initialTime = '00:00:00';
+            if (state.running.taskId === task.id) {
+                if (state.running.paused && state.running.pausedSeconds) {
+                    initialTime = formatTime(state.running.pausedSeconds);
+                } else if (state.running.startedAt) {
+                    const now = new Date();
+                    const startedAt = new Date(state.running.startedAt);
+                    const elapsedSeconds = Math.floor((now - startedAt) / 1000);
+                    initialTime = formatTime(elapsedSeconds);
+                }
+            }
+            
+            metaHtml += `
+                <div class="task-timer">
+                    <i class="bi bi-stopwatch"></i>
+                    <span id="taskTimer${task.id}">${initialTime}</span>
+                </div>
+            `;
+        }
+    }
+    
+    // メタ情報を更新
+    metaContainer.innerHTML = metaHtml;
+    
+    // タグ情報も更新
+    const tagsContainer = taskCard.querySelector('.task-tags');
+    if (tagsContainer) {
+        if (tags.length > 0) {
+            tagsContainer.innerHTML = tagsHtml;
+        } else {
+            tagsContainer.remove();
+        }
+    } else if (tags.length > 0) {
+        // タグコンテナが存在しない場合は作成
+        const taskInfo = taskCard.querySelector('.task-info');
+        if (taskInfo) {
+            const titleElement = taskInfo.querySelector('.task-title');
+            if (titleElement) {
+                const newTagsContainer = document.createElement('div');
+                newTagsContainer.className = 'task-tags';
+                newTagsContainer.innerHTML = tagsHtml;
+                titleElement.insertAdjacentElement('afterend', newTagsContainer);
+            }
+        }
+    }
+    
+    console.log('Task meta updated successfully');
 }
 
 // タスクタイマーリセット
@@ -1747,6 +1908,10 @@ async function loadSortedTasks(type = null) {
         // ソート設定を更新
         updateSortUI();
         
+        // ドラッグ&ドロップ機能を再初期化
+        setTimeout(() => {
+            initializeSortable();
+        }, 100);
     } catch (error) {
         console.error('Failed to load sorted tasks:', error);
         // エラーメッセージは表示しない
@@ -1755,14 +1920,21 @@ async function loadSortedTasks(type = null) {
 
 async function recomputeOrder() {
     try {
+        console.log('recomputeOrder開始 - タイプ:', state.sort.currentType);
+        
         const response = await api(`/api/tasks/recompute-order/?type=${state.sort.currentType}`, 'POST');
+        console.log('recomputeOrder APIレスポンス:', response);
+        
         state.sort.lastSortedAt = response.sorted_at;
         state.sort.isSorted = true;  // ソート済みフラグを設定
+        
+        console.log('ソート済みフラグを設定:', state.sort.isSorted);
         
         // タスクリストを再読み込み
         await loadSortedTasks();
         
         showSuccess('ソートを更新しました');
+        console.log('recomputeOrder完了');
     } catch (error) {
         console.error('Failed to recompute order:', error);
         showError('ソートの更新に失敗しました');
@@ -1869,29 +2041,7 @@ function initializeSortable() {
     });
 }
 
-// ドラッグハンドルを追加する関数
-function addDragHandles() {
-    const taskItems = document.querySelectorAll('.task-item');
-    taskItems.forEach(taskItem => {
-        // 既存のドラッグハンドルを削除
-        const existingHandle = taskItem.querySelector('.task-drag-handle');
-        if (existingHandle) {
-            existingHandle.remove();
-        }
-        
-        // 新しいドラッグハンドルを追加
-        const dragHandle = document.createElement('div');
-        dragHandle.className = 'task-drag-handle me-2';
-        dragHandle.innerHTML = '<i class="bi bi-grip-vertical text-muted"></i>';
-        dragHandle.style.cursor = 'grab';
-        
-        // タスクの最初の要素に挿入
-        const firstElement = taskItem.querySelector('.d-flex.align-items-center');
-        if (firstElement) {
-            firstElement.insertBefore(dragHandle, firstElement.firstChild);
-        }
-    });
-}
+
 
 // 締め切り時間の表示を計算
 function formatDeadlineDisplay(deadline) {
@@ -2053,9 +2203,9 @@ async function shareTask(taskId) {
         
         if (response.ok) {
             if (response.shared) {
-                showSuccess('タスクを共有しました！');
+                showSuccess('🎉 タスクを共有しました！みんなで頑張りましょう！ 💪');
             } else {
-                showInfo('タスクの共有を解除しました');
+                showInfo('🔒 タスクの共有を解除しました');
             }
             // タスクリストを更新
             loadSortedTasks();
@@ -2078,12 +2228,14 @@ async function shareTask(taskId) {
         }
     } catch (error) {
         console.error('タスク共有エラー:', error);
-        showError('タスクの共有に失敗しました');
+        showError('😅 タスクの共有に失敗しました。もう一度お試しください！');
     }
 }
 
 // イベントリスナー設定
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOMContentLoaded開始');
+    
     // 初期データ読み込み
     loadProfile();
     loadSortedTasks(); // 通常のloadTasks()の代わりにソート済みタスクを読み込み
@@ -2103,7 +2255,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ドラッグアンドドロップ初期化
     initializeSortable();
-    addDragHandles();
+    
+    console.log('DOMContentLoaded完了');
     
     // イベントリスナー
     document.getElementById('saveTaskBtn')?.addEventListener('click', createTask);
@@ -2123,14 +2276,25 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // ソート関連のイベントリスナー
     document.getElementById('sortTypeSelect')?.addEventListener('change', (e) => {
+        console.log('ソートタイプ変更:', e.target.value);
         state.sort.currentType = e.target.value;
         state.sort.isSorted = false;  // ソートタイプ変更時はソート済みフラグをリセット
         loadSortedTasks();
     });
     
     document.getElementById('autoSortToggle')?.addEventListener('change', (e) => {
+        console.log('自動ソート切り替え:', e.target.checked);
         updateSortSettings(e.target.checked);
     });
     
-    document.getElementById('sortNowBtn')?.addEventListener('click', recomputeOrder);
+    const sortNowBtn = document.getElementById('sortNowBtn');
+    console.log('sortNowBtn要素:', sortNowBtn);
+    if (sortNowBtn) {
+        sortNowBtn.addEventListener('click', () => {
+            console.log('ソート更新ボタンがクリックされました');
+            recomputeOrder();
+        });
+    } else {
+        console.error('sortNowBtn要素が見つかりません');
+    }
 });

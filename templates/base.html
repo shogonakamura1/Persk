@@ -14,39 +14,6 @@
     <link href="{% static 'css/app.css' %}" rel="stylesheet">
     
     <style>
-    /* ナビゲーションタブのスタイル */
-    .nav-tabs-container {
-        background: white;
-        border-radius: 12px;
-        padding: 1rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        margin-bottom: 1rem;
-    }
-    
-    .nav-tabs-container .btn-group {
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    
-    .nav-tabs-container .btn {
-        border: 1px solid #dee2e6;
-        padding: 0.75rem 1rem;
-        font-weight: 500;
-        transition: all 0.3s ease;
-    }
-    
-    .nav-tabs-container .btn:hover {
-        background: #f8f9fa;
-        border-color: #667eea;
-        color: #667eea;
-    }
-    
-    .nav-tabs-container .btn.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-color: #667eea;
-        color: white;
-    }
-    
     /* ユーザータイプ表示のスタイル */
     .user-type-display {
         display: flex;
@@ -61,6 +28,26 @@
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border: none;
         font-weight: 500;
+    }
+    
+    /* ナビゲーションタブのスタイル */
+    .btn-group .btn {
+        border: 1px solid #dee2e6;
+        padding: 0.75rem 1rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-group .btn:hover {
+        background: #f8f9fa;
+        border-color: #667eea;
+        color: #667eea;
+    }
+    
+    .btn-group .btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-color: #667eea;
+        color: white;
     }
     </style>
     
@@ -115,18 +102,16 @@
     <!-- Navigation Tabs -->
     {% if user.is_authenticated %}
     <div class="container mt-3">
-        <div class="nav-tabs-container">
-            <div class="btn-group w-100" role="group">
-                <a href="{% url 'tasks:home' %}" class="btn btn-outline-secondary flex-fill {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
-                    <i class="bi bi-list-task me-2"></i> Tasks
-                </a>
-                <a href="{% url 'tasks:timeline_page' %}" class="btn btn-outline-secondary flex-fill {% if request.resolver_match.url_name == 'timeline_page' %}active{% endif %}">
-                    <i class="bi bi-clock-history me-2"></i> Timeline
-                </a>
-                <a href="{% url 'tasks:analysis_page' %}" class="btn btn-outline-secondary flex-fill {% if request.resolver_match.url_name == 'analysis_page' %}active{% endif %}">
-                    <i class="bi bi-graph-up me-2"></i> 分析
-                </a>
-            </div>
+        <div class="btn-group w-100" role="group">
+            <a href="{% url 'tasks:home' %}" class="btn btn-outline-secondary flex-fill {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
+                <i class="bi bi-list-task me-2"></i> Tasks
+            </a>
+            <a href="{% url 'tasks:timeline_page' %}" class="btn btn-outline-secondary flex-fill {% if request.resolver_match.url_name == 'timeline_page' %}active{% endif %}">
+                <i class="bi bi-clock-history me-2"></i> Timeline
+            </a>
+            <a href="{% url 'tasks:analysis_page' %}" class="btn btn-outline-secondary flex-fill {% if request.resolver_match.url_name == 'analysis_page' %}active{% endif %}">
+                <i class="bi bi-graph-up me-2"></i> 分析
+            </a>
         </div>
     </div>
     {% endif %}
