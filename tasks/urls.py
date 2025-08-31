@@ -6,6 +6,8 @@ app_name = 'tasks'
 urlpatterns = [
     # ページ
     path('', views.home, name='home'),
+    path('timeline/', views.timeline_page, name='timeline_page'),
+    path('analysis/', views.analysis_page, name='analysis_page'),
     path('analytics/', views.analytics, name='analytics'),
     path('logout/', views.logout_view, name='logout'),
     
@@ -18,6 +20,7 @@ urlpatterns = [
     path('api/tasks/<int:task_id>/pause/', views.api_task_pause, name='api_task_pause'),
     path('api/tasks/<int:task_id>/resume/', views.api_task_resume, name='api_task_resume'),
     path('api/tasks/<int:task_id>/complete/', views.api_task_complete, name='api_task_complete'),
+    path('api/tasks/<int:task_id>/share/', views.api_task_share, name='api_task_share'),
     
     path('api/subtasks/<int:subtask_id>/start/', views.api_subtask_start, name='api_subtask_start'),
     path('api/subtasks/<int:subtask_id>/pause/', views.api_subtask_pause, name='api_subtask_pause'),
@@ -37,4 +40,13 @@ urlpatterns = [
     path('api/tasks/recompute-order/', views.api_recompute_order, name='api_recompute_order'),
     path('api/user/sort-settings/', views.api_sort_settings, name='api_sort_settings'),
     path('api/subtasks/create/', views.api_subtask_create, name='api_subtask_create'),
+    
+    # 分析API
+    path('api/analytics/heatmap/', views.api_heatmap, name='api_heatmap'),
+    path('api/analytics/heatmap_avg/', views.api_heatmap_avg, name='api_heatmap_avg'),
+    
+    # Timeline API
+    path('api/timeline/', views.api_timeline, name='api_timeline'),
+    path('api/timeline/<int:event_id>/like/', views.api_timeline_like, name='api_timeline_like'),
+    path('api/timeline/<int:event_id>/delete/', views.api_timeline_delete, name='api_timeline_delete'),
 ]

@@ -126,6 +126,11 @@ function renderTaskList() {
     const taskList = document.getElementById('taskList');
     if (!taskList) return;
     
+    // デバッグ: レンダリング時のタスク情報
+    console.log('renderTaskList - state.tasks:', state.tasks);
+    const doneTasks = state.tasks.filter(task => task.status === 'done');
+    console.log('renderTaskList - 完了したタスク:', doneTasks);
+    
     // 現在開いている詳細画面を記憶
     const openDetails = [];
     state.tasks.forEach(task => {
@@ -152,6 +157,11 @@ function renderTaskList() {
         const isRunning = state.running.taskId === task.id;
         const statusClass = task.status === 'doing' ? 'doing' : task.status === 'done' ? 'done' : '';
         const hasSubtasks = task.subtasks && task.subtasks.length > 0;
+        
+        // デバッグ: 各タスクの情報
+        if (task.status === 'done') {
+            console.log(`タスク ${task.id} (${task.title}) - status: ${task.status}, shared: ${task.shared}`);
+        }
         
         return `
             <div class="task-item p-3 ${statusClass}" data-task-id="${task.id}">
@@ -198,6 +208,11 @@ function renderTaskList() {
                                 <i class="bi bi-check-lg"></i> 完了
                             </button>
                         ` : ''}
+                        ${task.status === 'done' ? `
+                            <button class="btn ${task.shared ? 'btn-info' : 'btn-outline-info'} btn-sm me-1" onclick="event.stopPropagation(); shareTask(${task.id})">
+                                <i class="bi bi-share${task.shared ? '-fill' : ''}"></i> ${task.shared ? '共有中' : '共有'}
+                            </button>
+                        ` : ''}
 
                         <button class="btn btn-outline-danger btn-sm" onclick="event.stopPropagation(); deleteTask(${task.id})">
                             <i class="bi bi-trash"></i>
@@ -210,9 +225,6 @@ function renderTaskList() {
                             <div class="col-md-6">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h6>サブタスク</h6>
-                                    <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); openSubtaskModal(${task.id})">
-                                        <i class="bi bi-plus-lg"></i> 追加
-                                    </button>
                                 </div>
                                 <div id="subtasks${task.id}">
                                     ${task.subtasks.map(subtask => `
@@ -286,6 +298,9 @@ function renderTaskList() {
     }).join('');
     
     taskList.innerHTML = tasksHtml;
+    
+    // デバッグ: 生成されたHTMLを確認
+    console.log('生成されたHTML:', tasksHtml);
     
     // 記憶した詳細画面を再度開く
     openDetails.forEach(taskId => {
@@ -1187,7 +1202,13 @@ async function loadTasks() {
     try {
         console.log('Loading tasks...');
         const response = await api('/api/tasks/');
-        state.tasks = response.tasks;
+        
+        // sharedフィールドを確実に含める
+        state.tasks = response.tasks.map(task => ({
+            ...task,
+            shared: task.shared || false
+        }));
+        
         console.log('Loaded tasks:', state.tasks);
         
         // 実行中のタスクがあれば、タイマー状態を復元
@@ -1455,6 +1476,7 @@ async function loadSortedTasks(type = null) {
                     estimate_min: item.estimate_min,
                     importance: item.importance,
                     status: item.status,
+                    shared: item.shared || false,
                     score: item.score,
                     subtasks: []
                 };
@@ -1478,6 +1500,13 @@ async function loadSortedTasks(type = null) {
         state.tasks = parentTasks;
         state.sort.lastSortedAt = response.sorted_at;
         state.sort.isSorted = true;  // ソート済みフラグを設定
+        
+        // デバッグ: 完了したタスクの情報をログ出力
+        const doneTasks = parentTasks.filter(task => task.status === 'done');
+        console.log('完了したタスク:', doneTasks);
+        console.log('全タスク:', parentTasks);
+        console.log('APIレスポンス:', response);
+        
         renderTaskList();
         
         // ソート設定を更新
@@ -1717,6 +1746,42 @@ function showInfo(message) {
             alertDiv.parentNode.removeChild(alertDiv);
         }
     }, 3000);
+}
+
+// タスク共有機能
+async function shareTask(taskId) {
+    try {
+        const response = await api(`/api/tasks/${taskId}/share/`, 'POST');
+        
+        if (response.ok) {
+            if (response.shared) {
+                showSuccess('タスクを共有しました！');
+            } else {
+                showInfo('タスクの共有を解除しました');
+            }
+            // タスクリストを更新
+            loadSortedTasks();
+            
+            // Timelineページにいる場合はTimelineも更新
+            if (window.location.pathname.includes('/timeline/')) {
+                // Timelineを再読み込み
+                timelineCursor = null; // カーソルをリセット
+                const timelineList = document.getElementById('timelineList');
+                if (timelineList) {
+                    timelineList.innerHTML = `
+                        <div class="text-center text-muted">
+                            <i class="bi bi-clock-history" style="font-size: 2rem;"></i>
+                            <p class="mt-2">イベントがありません</p>
+                        </div>
+                    `;
+                }
+                loadTimeline();
+            }
+        }
+    } catch (error) {
+        console.error('タスク共有エラー:', error);
+        showError('タスクの共有に失敗しました');
+    }
 }
 
 // イベントリスナー設定

@@ -1,0 +1,586 @@
+{% extends 'base.html' %}
+
+{% block title %}Persk - 分析{% endblock %}
+
+{% block content %}
+<!-- Analysis Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">フォーカス時間分析</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <!-- 週移動 -->
+                        <button id="prevWeekBtn" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <span id="weekDisplay" class="fw-bold"></span>
+                        <button id="nextWeekBtn" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- タブ切替 -->
+                <div class="btn-group heatmap-tab-group mb-3" role="group">
+                    <button type="button" class="btn btn-outline-primary active" id="currentWeekTab">
+                        当週
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" id="averageTab">
+                        平均
+                    </button>
+                </div>
+                
+                <!-- 当週ヒートマップ -->
+                <div id="currentWeekContainer">
+                    <h6 class="text-center mb-3">当週のフォーカス時間</h6>
+                    <div id="currentWeekHeatmap">
+                        <div class="text-center text-muted">
+                            <i class="bi bi-graph-up" style="font-size: 2rem;"></i>
+                            <p class="mt-2">データを読み込み中...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 平均ヒートマップ（横並び） -->
+                <div id="averageContainer" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-center mb-3">週平均（直近1週間の平均）</h6>
+                            <div id="weekAvgHeatmap">
+                                <div class="text-center text-muted">
+                                    <i class="bi bi-graph-up" style="font-size: 2rem;"></i>
+                                    <p class="mt-2">データを読み込み中...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-center mb-3">月平均（直近1ヶ月の平均）</h6>
+                            <div id="monthAvgHeatmap">
+                                <div class="text-center text-muted">
+                                    <i class="bi bi-graph-up" style="font-size: 2rem;"></i>
+                                    <p class="mt-2">データを読み込み中...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --h1: #E8F5E9;
+    --h2: #C8E6C9;
+    --h3: #A5D6A7;
+    --h4: #66BB6A;
+    --h5: #1B5E20;
+}
+
+.heatmap-grid {
+    display: grid;
+    grid-template-columns: 60px repeat(7, 1fr);
+    grid-template-rows: repeat(24, 25px);
+    gap: 1px;
+    background-color: #e9ecef;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.heatmap-grid.week-average {
+    grid-template-columns: 60px 1fr;
+    max-width: 400px;
+}
+
+@media (max-width: 768px) {
+    .heatmap-grid {
+        grid-template-columns: 40px repeat(7, 1fr);
+        grid-template-rows: repeat(24, 20px);
+        max-width: 100%;
+        font-size: 0.5rem;
+    }
+    
+    .heatmap-time-label {
+        font-size: 0.5rem;
+        padding: 1px;
+    }
+    
+    .heatmap-label {
+        font-size: 0.6rem;
+    }
+}
+
+.heatmap-cell {
+    background-color: #f8f9fa;
+    border: none;
+    transition: all 0.2s ease;
+    position: relative;
+    cursor: pointer;
+    min-width: 20px;
+    min-height: 20px;
+}
+
+.heatmap-cell:hover {
+    transform: scale(1.1);
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.heatmap-cell.level-0 { background-color: #f8f9fa; }
+.heatmap-cell.level-1 { background-color: var(--h1); }
+.heatmap-cell.level-2 { background-color: var(--h2); }
+.heatmap-cell.level-3 { background-color: var(--h3); }
+.heatmap-cell.level-4 { background-color: var(--h4); }
+.heatmap-cell.level-5 { background-color: var(--h5); }
+
+.heatmap-label {
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #6c757d;
+    border: none;
+}
+
+.heatmap-time-label {
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    color: #6c757d;
+    border: none;
+    text-align: center;
+    padding: 2px;
+}
+
+.heatmap-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    z-index: 1000;
+    pointer-events: none;
+    white-space: nowrap;
+    display: none;
+}
+
+.heatmap-tab-group .btn.active {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: white;
+}
+
+#averageSubTabs .btn.active {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentWeekStart = null;
+let currentMode = 'current'; // 'current', 'week_avg', 'month_avg'
+let currentWindow = 4;
+
+// 週の開始日を取得（月曜日）
+function getWeekStart(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 月曜日を1とする
+    return new Date(d.setDate(diff));
+}
+
+// 日付フォーマット
+function formatDate(date) {
+    return date.toISOString().split('T')[0];
+}
+
+// 週表示を更新
+function updateWeekDisplay() {
+    const weekDisplay = document.getElementById('weekDisplay');
+    const prevWeekBtn = document.getElementById('prevWeekBtn');
+    const nextWeekBtn = document.getElementById('nextWeekBtn');
+    
+    if (currentMode === 'current') {
+        const weekEnd = new Date(currentWeekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        if (weekDisplay) {
+            weekDisplay.textContent = `${formatDate(currentWeekStart)} 〜 ${formatDate(weekEnd)}`;
+        }
+        // ボタンを表示
+        if (prevWeekBtn) prevWeekBtn.style.display = 'inline-block';
+        if (nextWeekBtn) nextWeekBtn.style.display = 'inline-block';
+    } else {
+        // 平均モードの場合は週表示とボタンを非表示
+        if (weekDisplay) {
+            weekDisplay.textContent = '';
+        }
+        if (prevWeekBtn) prevWeekBtn.style.display = 'none';
+        if (nextWeekBtn) nextWeekBtn.style.display = 'none';
+    }
+}
+
+// ヒートマップを生成
+function createHeatmap() {
+    const grid = document.createElement('div');
+    grid.className = 'heatmap-grid';
+    
+    const days = ['月', '火', '水', '木', '金', '土', '日'];
+    
+    // 左上の空セル
+    const emptyCell = document.createElement('div');
+    emptyCell.className = 'heatmap-label';
+    grid.appendChild(emptyCell);
+    
+    // 曜日ラベル（列ヘッダー）
+    days.forEach((day, index) => {
+        const label = document.createElement('div');
+        label.className = 'heatmap-label';
+        label.textContent = day;
+        grid.appendChild(label);
+    });
+    
+    // 時間ラベルとデータセル（行）
+    for (let hour = 0; hour < 24; hour++) {
+        // 時間ラベル（行ヘッダー）
+        const timeLabel = document.createElement('div');
+        timeLabel.className = 'heatmap-time-label';
+        timeLabel.textContent = `${hour.toString().padStart(2, '0')}:00`;
+        grid.appendChild(timeLabel);
+        
+        // 各曜日のデータセル
+        for (let day = 0; day < 7; day++) {
+            const cell = document.createElement('div');
+            cell.className = 'heatmap-cell level-0';
+            cell.dataset.day = day;
+            cell.dataset.hour = hour;
+            
+            // ツールチップ
+            const tooltip = document.createElement('div');
+            tooltip.className = 'heatmap-tooltip';
+            cell.appendChild(tooltip);
+            
+            // マウスイベント
+            cell.addEventListener('mouseenter', function(e) {
+                const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+                tooltip.textContent = `${days[day]} ${timeStr}`;
+                tooltip.style.display = 'block';
+                tooltip.style.left = e.pageX + 10 + 'px';
+                tooltip.style.top = e.pageY - 10 + 'px';
+            });
+            
+            cell.addEventListener('mousemove', function(e) {
+                tooltip.style.left = e.pageX + 10 + 'px';
+                tooltip.style.top = e.pageY - 10 + 'px';
+            });
+            
+            cell.addEventListener('mouseleave', function() {
+                tooltip.style.display = 'none';
+            });
+            
+            grid.appendChild(cell);
+        }
+    }
+    
+    return grid;
+}
+
+// 週平均用ヒートマップ作成（1日分のみ）
+function createWeekAverageHeatmap() {
+    const container = document.createElement('div');
+    const grid = document.createElement('div');
+    grid.className = 'heatmap-grid week-average';
+    
+    // 左上の空セル
+    const emptyCell = document.createElement('div');
+    emptyCell.className = 'heatmap-label';
+    grid.appendChild(emptyCell);
+    
+    // 1日分のラベル（月曜日のみ）
+    const dayLabel = document.createElement('div');
+    dayLabel.className = 'heatmap-label';
+    dayLabel.textContent = '平均';
+    grid.appendChild(dayLabel);
+    
+    // 時間ラベルとデータセル（行）
+    for (let hour = 0; hour < 24; hour++) {
+        // 時間ラベル（行ヘッダー）
+        const timeLabel = document.createElement('div');
+        timeLabel.className = 'heatmap-time-label';
+        timeLabel.textContent = `${hour.toString().padStart(2, '0')}:00`;
+        grid.appendChild(timeLabel);
+        
+        // 1日分のデータセル
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell level-0';
+        cell.dataset.day = '0';
+        cell.dataset.hour = hour;
+        
+        // ツールチップ
+        const tooltip = document.createElement('div');
+        tooltip.className = 'heatmap-tooltip';
+        cell.appendChild(tooltip);
+        
+        // マウスイベント
+        cell.addEventListener('mouseenter', function(e) {
+            const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+            tooltip.textContent = `月 ${timeStr}`;
+            tooltip.style.display = 'block';
+            tooltip.style.left = e.pageX + 10 + 'px';
+            tooltip.style.top = e.pageY - 10 + 'px';
+        });
+        
+        cell.addEventListener('mouseleave', function() {
+            tooltip.style.display = 'none';
+        });
+        
+        grid.appendChild(cell);
+    }
+    
+    container.appendChild(grid);
+    return container;
+}
+
+// ヒートマップデータを更新
+function updateHeatmapData() {
+    const weekStart = currentWeekStart.toISOString().split('T')[0];
+    const url = `/api/analytics/heatmap/?week_start=${weekStart}`;
+    
+    fetch(url)
+    .then(response => response.json())
+    .then(data => {
+        const container = document.getElementById('currentWeekHeatmap');
+        
+        if (data.levels) {
+            // ヒートマップ作成
+            const heatmap = createHeatmap();
+            container.innerHTML = '';
+            container.appendChild(heatmap);
+            
+            // セルのレベルを更新（30分データを1時間データに集約）
+            const hourData = {};
+            
+            // 30分データを1時間データに集約
+            data.levels.forEach(item => {
+                const hour = Math.floor(item.slot / 2);
+                const key = `${item.dow}-${hour}`;
+                if (!hourData[key]) {
+                    hourData[key] = { total: 0, count: 0 };
+                }
+                hourData[key].total += item.level;
+                hourData[key].count += 1;
+            });
+            
+            // 1時間平均を計算してセルを更新
+            Object.keys(hourData).forEach(key => {
+                const [dow, hour] = key.split('-').map(Number);
+                const avgLevel = Math.round(hourData[key].total / hourData[key].count);
+                const cell = container.querySelector(`[data-day="${dow}"][data-hour="${hour}"]`);
+                if (cell) {
+                    cell.className = `heatmap-cell level-${avgLevel}`;
+                }
+            });
+        }
+    })
+    .catch(error => {
+        console.error('ヒートマップデータ取得エラー:', error);
+        showToast('データの取得に失敗しました', 'error');
+    });
+}
+
+// タブ切替
+document.getElementById('currentWeekTab').addEventListener('click', function() {
+    currentMode = 'current';
+    const currentWeekContainer = document.getElementById('currentWeekContainer');
+    const averageContainer = document.getElementById('averageContainer');
+    if (currentWeekContainer) currentWeekContainer.style.display = 'block';
+    if (averageContainer) averageContainer.style.display = 'none';
+    updateActiveTabs();
+    updateWeekDisplay();
+    updateHeatmapData();
+});
+
+document.getElementById('averageTab').addEventListener('click', function() {
+    currentMode = 'average';
+    const currentWeekContainer = document.getElementById('currentWeekContainer');
+    const averageContainer = document.getElementById('averageContainer');
+    if (currentWeekContainer) currentWeekContainer.style.display = 'none';
+    if (averageContainer) averageContainer.style.display = 'block';
+    updateActiveTabs();
+    updateWeekDisplay();
+    loadAverageData();
+});
+
+// アクティブタブ更新
+function updateActiveTabs() {
+    // メインタブ
+    const currentWeekTab = document.getElementById('currentWeekTab');
+    const averageTab = document.getElementById('averageTab');
+    if (currentWeekTab) currentWeekTab.classList.toggle('active', currentMode === 'current');
+    if (averageTab) averageTab.classList.toggle('active', currentMode === 'average');
+}
+
+// 平均データ読み込み
+function loadAverageData() {
+    // 週平均データ読み込み
+    loadWeekAverageData();
+    // 月平均データ読み込み
+    loadMonthAverageData();
+}
+
+// 週平均データ読み込み
+function loadWeekAverageData() {
+    const url = `/api/analytics/heatmap_avg/?mode=week&window=4`;
+    
+    fetch(url)
+    .then(response => response.json())
+    .then(data => {
+        updateAverageHeatmap('weekAvgHeatmap', data, '週平均');
+    })
+    .catch(error => {
+        console.error('週平均データ取得エラー:', error);
+        showToast('週平均データの取得に失敗しました', 'error');
+    });
+}
+
+// 月平均データ読み込み
+function loadMonthAverageData() {
+    const url = `/api/analytics/heatmap_avg/?mode=month&window=3`;
+    
+    fetch(url)
+    .then(response => response.json())
+    .then(data => {
+        updateAverageHeatmap('monthAvgHeatmap', data, '月平均');
+    })
+    .catch(error => {
+        console.error('月平均データ取得エラー:', error);
+        showToast('月平均データの取得に失敗しました', 'error');
+    });
+}
+
+// 平均ヒートマップ更新
+function updateAverageHeatmap(containerId, data, title) {
+    const container = document.getElementById(containerId);
+    
+    if (data.levels) {
+        // 週平均の場合は1日分のヒートマップ、月平均の場合は1週間分のヒートマップを作成
+        const heatmap = title === '週平均' ? createWeekAverageHeatmap() : createHeatmap();
+        container.innerHTML = '';
+        container.appendChild(heatmap);
+        
+        // 週平均の場合：1週間の平均を1日として表示
+        if (title === '週平均') {
+            const weekData = {};
+            
+            // 7日分のデータを1日分に集約
+            data.levels.forEach(item => {
+                const hour = Math.floor(item.slot / 2);
+                const key = `0-${hour}`; // 全て0日目（1日）として扱う
+                if (!weekData[key]) {
+                    weekData[key] = { total: 0, count: 0 };
+                }
+                weekData[key].total += item.level;
+                weekData[key].count += 1;
+            });
+            
+            // 平均を計算してセルを更新（1日分のみ表示）
+            Object.keys(weekData).forEach(key => {
+                const [dow, hour] = key.split('-').map(Number);
+                const avgLevel = Math.round(weekData[key].total / weekData[key].count);
+                // 1日目（月曜日）のみに表示
+                const cell = container.querySelector(`[data-day="0"][data-hour="${hour}"]`);
+                if (cell) {
+                    cell.className = `heatmap-cell level-${avgLevel}`;
+                }
+            });
+        }
+        // 月平均の場合：1ヶ月の平均を1週間として表示
+        else if (title === '月平均') {
+            const monthData = {};
+            
+            // 4週間分のデータを1週間分に集約
+            data.levels.forEach(item => {
+                const hour = Math.floor(item.slot / 2);
+                const key = `${item.dow}-${hour}`;
+                if (!monthData[key]) {
+                    monthData[key] = { total: 0, count: 0 };
+                }
+                monthData[key].total += item.level;
+                monthData[key].count += 1;
+            });
+            
+            // 平均を計算してセルを更新
+            Object.keys(monthData).forEach(key => {
+                const [dow, hour] = key.split('-').map(Number);
+                const avgLevel = Math.round(monthData[key].total / monthData[key].count);
+                const cell = container.querySelector(`[data-day="${dow}"][data-hour="${hour}"]`);
+                if (cell) {
+                    cell.className = `heatmap-cell level-${avgLevel}`;
+                }
+            });
+        }
+    }
+}
+
+// 週移動
+document.getElementById('prevWeekBtn').addEventListener('click', function() {
+    if (currentMode === 'current') {
+        currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+        updateWeekDisplay();
+        updateHeatmapData();
+    }
+});
+
+document.getElementById('nextWeekBtn').addEventListener('click', function() {
+    if (currentMode === 'current') {
+        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+        updateWeekDisplay();
+        updateHeatmapData();
+    }
+});
+
+
+
+// 初期化
+document.addEventListener('DOMContentLoaded', function() {
+    // 今週の月曜日を設定
+    currentWeekStart = getWeekStart(new Date());
+    
+    // 初期表示
+    updateWeekDisplay();
+    updateHeatmapData();
+});
+
+// トースト表示関数（簡易版）
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+</script>
+{% endblock %}

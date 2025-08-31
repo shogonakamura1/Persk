@@ -24,6 +24,21 @@
             </a>
             
             {% if user.is_authenticated %}
+            <!-- タブナビゲーション -->
+            <div class="navbar-nav me-auto">
+                <div class="btn-group" role="group">
+                    <a href="{% url 'tasks:home' %}" class="btn btn-outline-light {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
+                        <i class="bi bi-list-task"></i> Tasks
+                    </a>
+                    <a href="{% url 'tasks:timeline_page' %}" class="btn btn-outline-light {% if request.resolver_match.url_name == 'timeline_page' %}active{% endif %}">
+                        <i class="bi bi-clock-history"></i> Timeline
+                    </a>
+                    <a href="{% url 'tasks:analysis_page' %}" class="btn btn-outline-light {% if request.resolver_match.url_name == 'analysis_page' %}active{% endif %}">
+                        <i class="bi bi-graph-up"></i> 分析
+                    </a>
+                </div>
+            </div>
+            
             <div class="navbar-nav ms-auto">
                 <span class="navbar-text me-3">
                     <i class="bi bi-person-circle"></i> {{ user.username }}

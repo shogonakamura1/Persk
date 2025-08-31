@@ -10,7 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.db.models import Prefetch
-from .models import UserProfile, Task, SubTask, FocusLog, DiagnosisAnswer, SortLog
+from .models import UserProfile, Task, SubTask, FocusLog, DiagnosisAnswer, SortLog, TimelineEvent, TimelineLike
 
 
 def jst_now():
@@ -139,6 +139,24 @@ def analytics(request):
 
 
 @login_required
+def tasks_page(request):
+    """タスクページ"""
+    return render(request, 'tasks.html')
+
+
+@login_required
+def timeline_page(request):
+    """Timelineページ"""
+    return render(request, 'timeline.html')
+
+
+@login_required
+def analysis_page(request):
+    """分析ページ（ヒートマップ）"""
+    return render(request, 'analysis.html')
+
+
+@login_required
 def logout_view(request):
     """ログアウト"""
     logout(request)
@@ -164,6 +182,7 @@ def api_tasks(request):
             'tags': task.tags,
             'importance': task.importance,
             'status': task.status,
+            'shared': task.shared,
             'started_at': task.started_at.isoformat() if task.started_at else None,
             'completed_at': task.completed_at.isoformat() if task.completed_at else None,
             'subtasks': [
@@ -660,6 +679,7 @@ def api_tasks_sorted(request):
                 'deadline': task.deadline.isoformat(),
                 'estimate_min': task.estimate_min,
                 'importance': task.importance,
+                'shared': task.shared,
                 'score': round(score, 3),
                 'has_subtasks': task.subtasks.exists()
             }
@@ -779,6 +799,359 @@ def api_subtask_create(request):
         return JsonResponse({
             'ok': True,
             'id': subtask.id
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+# ヒートマップ関連の関数
+def bucket_index(dt_jst):
+    """30分ビンのインデックスを計算"""
+    dow = dt_jst.weekday()  # 0=Mon
+    slot = dt_jst.hour * 2 + (1 if dt_jst.minute >= 30 else 0)
+    return dow, slot  # 0..6, 0..47
+
+
+def week_bins(user, week_start):
+    """週の30分ビンデータを計算"""
+    # 初期化
+    bins = [[0] * 48 for _ in range(7)]
+    
+    # 週の範囲
+    start = timezone.make_aware(datetime.combine(week_start, datetime.min.time()))
+    end = start + timedelta(days=7)
+    
+    logs = FocusLog.objects.filter(
+        user=user,
+        started_at__lt=end,
+        stopped_at__gt=start
+    )
+    
+    for log in logs:
+        # logを30分境界で分割加算（部分重なり分も按分）
+        log_start = max(log.started_at, start)
+        log_end = min(log.stopped_at, end)
+        
+        # 30分単位で分割
+        current = log_start
+        while current < log_end:
+            next_boundary = current.replace(
+                minute=(current.minute // 30) * 30,
+                second=0,
+                microsecond=0
+            ) + timedelta(minutes=30)
+            
+            segment_end = min(next_boundary, log_end)
+            segment_seconds = int((segment_end - current).total_seconds())
+            
+            dow, slot = bucket_index(timezone.localtime(current))
+            bins[dow][slot] += segment_seconds
+            
+            current = segment_end
+    
+    return bins  # 秒
+
+
+def quantize(bins):
+    """ビンデータを5段階に量子化"""
+    flat = [sec for row in bins for sec in row]
+    max_sec = max(flat) if flat else 0
+    
+    def level(sec):
+        if max_sec <= 0:
+            return 0
+        r = sec / max_sec
+        if r <= 0:
+            return 0
+        elif r <= 0.2:
+            return 1
+        elif r <= 0.4:
+            return 2
+        elif r <= 0.6:
+            return 3
+        elif r <= 0.8:
+            return 4
+        else:
+            return 5
+    
+    levels = []
+    for d in range(7):
+        for s in range(48):
+            levels.append({
+                'dow': d,
+                'slot': s,
+                'level': level(bins[d][s])
+            })
+    
+    return levels, max_sec
+
+
+def week_avg_bins(user, window_weeks=4):
+    """週平均ビンデータを計算"""
+    # 直近window_weeks分の週を遡る
+    stacks = [[[] for _ in range(48)] for __ in range(7)]  # 各ビンの非ゼロ値を積む
+    
+    now = jst_now()
+    for k in range(window_weeks):
+        # 週の開始日を計算（月曜日）
+        week_start = now.date() - timedelta(days=now.weekday() + 7 * k)
+        bins = week_bins(user, week_start)
+        
+        for d in range(7):
+            for s in range(48):
+                sec = bins[d][s]
+                if sec > 0:
+                    stacks[d][s].append(sec)
+    
+    # 平均を計算
+    avg_bins = []
+    for d in range(7):
+        for s in range(48):
+            values = stacks[d][s]
+            avg_sec = sum(values) / len(values) if values else 0
+            avg_bins.append({
+                'dow': d,
+                'slot': s,
+                'level': 0,  # 後で量子化
+                'sec': avg_sec
+            })
+    
+    return avg_bins
+
+
+
+
+
+# 分析API
+@login_required
+@require_http_methods(["GET"])
+def api_heatmap(request):
+    """ヒートマップデータ取得（当週）"""
+    try:
+        week_start_str = request.GET.get('week_start')
+        if week_start_str:
+            week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+        else:
+            # 今週の月曜日
+            now = jst_now()
+            week_start = now.date() - timedelta(days=now.weekday())
+        
+        bins = week_bins(request.user, week_start)
+        levels, max_sec = quantize(bins)
+        
+        return JsonResponse({
+            'week_start': week_start.strftime('%Y-%m-%d'),
+            'bin': 30,
+            'levels': levels,
+            'max_sec': max_sec
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_heatmap_avg(request):
+    """ヒートマップ平均データ取得"""
+    try:
+        mode = request.GET.get('mode', 'week')  # week|month
+        window = int(request.GET.get('window', 4 if mode == 'week' else 3))
+        
+        if mode == 'week':
+            avg_bins = week_avg_bins(request.user, window)
+        else:  # month
+            # 月平均は週平均の4倍の期間で計算
+            avg_bins = week_avg_bins(request.user, window * 4)
+        
+        # 平均値を量子化
+        sec_values = [item['sec'] for item in avg_bins]
+        max_sec = max(sec_values) if sec_values else 0
+        
+        def level(sec):
+            if max_sec <= 0:
+                return 0
+            r = sec / max_sec
+            if r <= 0:
+                return 0
+            elif r <= 0.2:
+                return 1
+            elif r <= 0.4:
+                return 2
+            elif r <= 0.6:
+                return 3
+            elif r <= 0.8:
+                return 4
+            else:
+                return 5
+        
+        for item in avg_bins:
+            item['level'] = level(item['sec'])
+            del item['sec']  # レスポンスから除外
+        
+        return JsonResponse({
+            'mode': mode,
+            'window': window,
+            'bin': 30,
+            'levels': avg_bins,
+            'max_sec': max_sec
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+# Timeline API
+@login_required
+@require_http_methods(["GET"])
+def api_timeline(request):
+    """Timeline取得"""
+    try:
+        limit = int(request.GET.get('limit', 50))
+        cursor = request.GET.get('cursor')
+        
+        # 削除されていないイベントを取得（自分のイベント）
+        events = TimelineEvent.objects.filter(
+            deleted_at__isnull=True,
+            user=request.user
+        ).order_by('-ts')
+        
+        if cursor:
+            # cursor実装は簡易版（実際はより複雑な実装が必要）
+            try:
+                cursor_time = datetime.fromisoformat(cursor)
+                events = events.filter(ts__lt=cursor_time)
+            except:
+                pass
+        
+        events = events[:limit]
+        
+        items = []
+        for event in events:
+            # いいね数を取得
+            likes_count = event.likes.count()
+            # 自分がいいねしているかチェック
+            liked = event.likes.filter(user=request.user).exists()
+            
+            item_data = {
+                'id': event.id,
+                'user': event.user.username,
+                'kind': event.kind,
+                'task_id': event.task.id if event.task else None,
+                'ts': event.ts.isoformat(),
+                'likes': likes_count,
+                'liked': liked
+            }
+            
+            # 共有イベントの場合はタスク情報を追加
+            if event.kind == 'task_shared' and event.task:
+                item_data['task_title'] = event.task.title
+                item_data['estimate_min'] = event.task.estimate_min
+            
+            items.append(item_data)
+        
+        # 次のcursor（簡易版）
+        next_cursor = None
+        if len(items) == limit:
+            next_cursor = items[-1]['ts']
+        
+        return JsonResponse({
+            'items': items,
+            'next_cursor': next_cursor
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_timeline_like(request, event_id):
+    """Timelineいいね"""
+    try:
+        event = get_object_or_404(TimelineEvent, id=event_id, deleted_at__isnull=True)
+        
+        # 既存のいいねをチェック
+        like, created = TimelineLike.objects.get_or_create(
+            user=request.user,
+            event=event
+        )
+        
+        if not created:
+            # 既にいいね済みなら削除
+            like.delete()
+            liked = False
+        else:
+            liked = True
+        
+        # いいね数を再取得
+        likes_count = event.likes.count()
+        
+        return JsonResponse({
+            'ok': True,
+            'liked': liked,
+            'count': likes_count
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_timeline_delete(request, event_id):
+    """Timeline削除"""
+    try:
+        event = get_object_or_404(TimelineEvent, id=event_id, deleted_at__isnull=True)
+        
+        # 自分のイベントのみ削除可能
+        if event.user != request.user:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+        
+        # ソフトデリート
+        event.deleted_at = timezone.now()
+        event.save()
+        
+        return JsonResponse({'ok': True})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_task_share(request, task_id):
+    """タスク共有"""
+    try:
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+        
+        # 完了したタスクのみ共有可能
+        if task.status != 'done':
+            return JsonResponse({'error': '完了したタスクのみ共有できます'}, status=400)
+        
+        # 共有フラグを切り替え
+        task.shared = not task.shared
+        task.save()
+        
+        # 共有された場合はTimelineEventを作成、解除された場合は削除
+        if task.shared:
+            TimelineEvent.objects.create(
+                user=request.user,
+                kind='task_shared',
+                task=task,
+                ts=timezone.now(),
+                payload_json={
+                    'title': task.title,
+                    'estimate_min': task.estimate_min,
+                    'tags': task.tags
+                }
+            )
+        else:
+            # 共有解除時は該当するTimelineEventを削除
+            TimelineEvent.objects.filter(
+                user=request.user,
+                kind='task_shared',
+                task=task
+            ).delete()
+        
+        return JsonResponse({
+            'ok': True,
+            'shared': task.shared
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)

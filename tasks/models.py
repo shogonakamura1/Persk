@@ -42,6 +42,7 @@ class Task(models.Model):
     )
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    shared = models.BooleanField(default=False)  # 共有フラグ
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -91,6 +92,33 @@ class FocusLog(models.Model):
     def __str__(self):
         task_name = self.task.title if self.task else self.subtask.title
         return f"{self.user.username} - {task_name} ({self.seconds}s)"
+
+
+class TimelineEvent(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    kind = models.CharField(max_length=32)  # 'task_start'|'task_stop'|'task_complete' など
+    task = models.ForeignKey(Task, null=True, blank=True, on_delete=models.SET_NULL)
+    ts = models.DateTimeField(db_index=True)
+    payload_json = models.JSONField(default=dict)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.kind} at {self.ts}"
+
+    class Meta:
+        ordering = ['-ts']
+
+
+class TimelineLike(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    event = models.ForeignKey(TimelineEvent, on_delete=models.CASCADE, related_name="likes")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ('user', 'event')
+
+    def __str__(self):
+        return f"{self.user.username} likes {self.event}"
 
 
 class SortLog(models.Model):

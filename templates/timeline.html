@@ -1,0 +1,344 @@
+{% extends 'base.html' %}
+
+{% block title %}Persk - Timeline{% endblock %}
+
+{% block content %}
+<!-- Timeline Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Timeline</h5>
+            </div>
+            <div class="card-body">
+                <div id="timelineList">
+                    <div class="text-center text-muted">
+                        <i class="bi bi-clock-history" style="font-size: 2rem;"></i>
+                        <p class="mt-2">イベントがありません</p>
+                    </div>
+                </div>
+                <div id="timelineLoading" class="text-center" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.timeline-item {
+    border-left: 3px solid #dee2e6;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.timeline-item:hover {
+    border-left-color: #007bff;
+    background-color: #f8f9fa;
+    transform: translateX(5px);
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 1.5rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #007bff;
+    border: 2px solid white;
+}
+
+.timeline-item.task-start::before {
+    background-color: #28a745;
+}
+
+.timeline-item.task-stop::before {
+    background-color: #ffc107;
+}
+
+.timeline-item.task-complete::before {
+    background-color: #dc3545;
+}
+
+.timeline-item.task-shared::before {
+    background-color: #17a2b8;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.timeline-user {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.timeline-time {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.timeline-content {
+    margin-bottom: 0.5rem;
+}
+
+.timeline-actions {
+    display: flex;
+    gap: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.timeline-item:hover .timeline-actions {
+    opacity: 1;
+}
+
+.like-button {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.like-button:hover {
+    color: #dc3545;
+}
+
+.like-button.liked {
+    color: #dc3545;
+}
+
+.delete-button {
+    background: none;
+    border: none;
+    color: #6c757d;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.delete-button:hover {
+    color: #dc3545;
+}
+
+.timeline-item.own-item .delete-button {
+    opacity: 1;
+}
+
+.timeline-item:not(.own-item) .delete-button {
+    display: none;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let timelineCursor = null;
+let isLoading = false;
+
+// Timeline読み込み
+function loadTimeline() {
+    if (isLoading) return;
+    
+    isLoading = true;
+    document.getElementById('timelineLoading').style.display = 'block';
+    
+    let url = '/api/timeline/?limit=50';
+    if (timelineCursor) {
+        url += `&cursor=${timelineCursor}`;
+    }
+    
+    fetch(url, {
+        headers: {
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Timeline API Response:', data);
+        if (data.items && data.items.length > 0) {
+            renderTimelineItems(data.items);
+            timelineCursor = data.next_cursor;
+        }
+    })
+    .catch(error => {
+        console.error('Timeline読み込みエラー:', error);
+        showToast('Timelineの読み込みに失敗しました', 'error');
+    })
+    .finally(() => {
+        isLoading = false;
+        document.getElementById('timelineLoading').style.display = 'none';
+    });
+}
+
+// Timelineアイテム表示
+function renderTimelineItems(items) {
+    const container = document.getElementById('timelineList');
+    
+    if (container.querySelector('.text-muted')) {
+        container.innerHTML = '';
+    }
+    
+    items.forEach(item => {
+        const itemElement = createTimelineItem(item);
+        container.appendChild(itemElement);
+    });
+}
+
+// Timelineアイテム作成
+function createTimelineItem(item) {
+    console.log('Creating timeline item:', item);
+    const div = document.createElement('div');
+    div.className = `timeline-item ${item.kind}`;
+    if (item.user === '{{ user.username }}') {
+        div.classList.add('own-item');
+    }
+    
+    const time = new Date(item.ts).toLocaleString('ja-JP');
+    const kindText = getKindText(item.kind, item);
+    
+    div.innerHTML = `
+        <div class="timeline-header">
+            <span class="timeline-user">${item.user}</span>
+            <span class="timeline-time">${time}</span>
+        </div>
+        <div class="timeline-content">
+            ${kindText.replace(/\n/g, '<br>')}
+        </div>
+        <div class="timeline-actions">
+            <button class="like-button ${item.liked ? 'liked' : ''}" onclick="toggleLike(${item.id})">
+                <i class="bi bi-heart${item.liked ? '-fill' : ''}"></i>
+                <span class="like-count">${item.likes}</span>
+            </button>
+            <button class="delete-button" onclick="deleteTimelineItem(${item.id})">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    `;
+    
+    return div;
+}
+
+// イベント種別テキスト取得
+function getKindText(kind, item) {
+    if (kind === 'task_shared') {
+        // 共有イベントの場合は特別な表示
+        const taskTitle = item.task_title || 'タスク';
+        const estimateMin = item.estimate_min || 0;
+        return `${taskTitle}\nかかった時間: ${estimateMin}分`;
+    }
+    
+    const kindMap = {
+        'task_start': 'タスクを開始しました',
+        'task_stop': 'タスクを一時停止しました',
+        'task_complete': 'タスクを完了しました',
+        'subtask_start': 'サブタスクを開始しました',
+        'subtask_complete': 'サブタスクを完了しました'
+    };
+    return kindMap[kind] || kind;
+}
+
+// いいねトグル
+function toggleLike(eventId) {
+    fetch(`/api/timeline/${eventId}/like/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            const likeButton = document.querySelector(`[onclick="toggleLike(${eventId})"]`);
+            const icon = likeButton.querySelector('i');
+            const count = likeButton.querySelector('.like-count');
+            
+            if (data.liked) {
+                likeButton.classList.add('liked');
+                icon.className = 'bi bi-heart-fill';
+            } else {
+                likeButton.classList.remove('liked');
+                icon.className = 'bi bi-heart';
+            }
+            
+            count.textContent = data.count;
+        }
+    })
+    .catch(error => {
+        console.error('いいねエラー:', error);
+        showToast('いいねの処理に失敗しました', 'error');
+    });
+}
+
+// Timeline削除
+function deleteTimelineItem(eventId) {
+    if (!confirm('このイベントを削除しますか？')) {
+        return;
+    }
+    
+    fetch(`/api/timeline/${eventId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            const item = document.querySelector(`[onclick="deleteTimelineItem(${eventId})"]`).closest('.timeline-item');
+            item.style.opacity = '0';
+            setTimeout(() => {
+                item.remove();
+            }, 300);
+            showToast('イベントを削除しました', 'success');
+        }
+    })
+    .catch(error => {
+        console.error('削除エラー:', error);
+        showToast('削除に失敗しました', 'error');
+    });
+}
+
+// 無限スクロール
+function handleScroll() {
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 1000) {
+        loadTimeline();
+    }
+}
+
+// 初期化
+document.addEventListener('DOMContentLoaded', function() {
+    loadTimeline();
+    window.addEventListener('scroll', handleScroll);
+});
+
+// トースト表示関数（簡易版）
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+</script>
+{% endblock %}
