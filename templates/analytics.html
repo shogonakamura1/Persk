@@ -3,84 +3,301 @@
 {% block title %}Persk - 分析{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">分析ダッシュボード</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <h3 id="totalFocusTime">0</h3>
-                            <p class="text-muted">総フォーカス時間（時間）</p>
+<div class="main-container">
+    <!-- ヘッダー -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="main-column">
+                <div class="task-header">
+                    <div class="header-left">
+                        <div class="header-icon">
+                            <i class="bi bi-graph-up"></i>
                         </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <h3 id="totalTasks">0</h3>
-                            <p class="text-muted">完了タスク数</p>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <h3 id="avgFocusTime">0</h3>
-                            <p class="text-muted">平均フォーカス時間（分）</p>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <h3 id="completionRate">0%</h3>
-                            <p class="text-muted">完了率</p>
+                        <div class="header-text">
+                            <h2>分析ダッシュボード</h2>
+                            <p>あなたの作業パターンを分析しましょう</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">時間帯別フォーカス時間</h5>
+    <!-- 統計カード -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon">
+                    <i class="bi bi-clock"></i>
+                </div>
+                <div class="stats-content">
+                    <h3 id="totalFocusTime">0</h3>
+                    <p>総フォーカス時間（時間）</p>
+                </div>
             </div>
-            <div class="card-body">
-                <canvas id="hourlyChart" width="400" height="200"></canvas>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <div class="stats-content">
+                    <h3 id="totalTasks">0</h3>
+                    <p>完了タスク数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon">
+                    <i class="bi bi-stopwatch"></i>
+                </div>
+                <div class="stats-content">
+                    <h3 id="avgFocusTime">0</h3>
+                    <p>平均フォーカス時間（分）</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-icon">
+                    <i class="bi bi-percent"></i>
+                </div>
+                <div class="stats-content">
+                    <h3 id="completionRate">0%</h3>
+                    <p>完了率</p>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">タグ別フォーカス時間</h5>
+
+    <!-- チャート -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5>時間帯別フォーカス時間</h5>
+                </div>
+                <div class="chart-body">
+                    <canvas id="hourlyChart" width="400" height="200"></canvas>
+                </div>
             </div>
-            <div class="card-body">
-                <canvas id="tagChart" width="400" height="200"></canvas>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5>タグ別フォーカス時間</h5>
+                </div>
+                <div class="chart-body">
+                    <canvas id="tagChart" width="400" height="200"></canvas>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">最近のフォーカスセッション</h5>
-            </div>
-            <div class="card-body">
+    <!-- 最近のセッション -->
+    <div class="row">
+        <div class="col-12">
+            <div class="main-column">
+                <div class="section-header">
+                    <h5>最近のフォーカスセッション</h5>
+                </div>
                 <div id="recentSessions">
-                    <div class="text-center text-muted">
-                        <i class="bi bi-clock-history" style="font-size: 2rem;"></i>
-                        <p class="mt-2">フォーカスセッションがありません</p>
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-clock-history" style="font-size: 3rem; opacity: 0.3;"></i>
+                        <p class="mt-3">フォーカスセッションがありません</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+/* 分析ページ専用スタイル */
+body {
+    background-color: #f8f9fa;
+}
+
+.main-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.main-column {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+}
+
+/* ヘッダー部分 */
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.header-text h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #333;
+    margin: 0;
+}
+
+.header-text p {
+    color: #666;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* 統計カード */
+.stats-card {
+    background: white;
+    border-radius: 20px;
+    padding: 2.5rem 2rem;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.1);
+    text-align: center;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+
+.stats-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.stats-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 15px 35px rgba(102, 126, 234, 0.2);
+    border-color: #667eea;
+}
+
+.stats-icon {
+    width: 70px;
+    height: 70px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+    color: white;
+    font-size: 1.8rem;
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.stats-content h3 {
+    font-size: 3rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0 0 0.75rem 0;
+}
+
+.stats-content p {
+    color: #667eea;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* チャートカード */
+.chart-card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.1);
+    border: 2px solid transparent;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.chart-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(102, 126, 234, 0.15);
+    border-color: #667eea;
+}
+
+.chart-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 1.5rem 2rem;
+    border-bottom: none;
+}
+
+.chart-header h5 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: white;
+    margin: 0;
+}
+
+.chart-body {
+    padding: 2.5rem;
+}
+
+/* セクションヘッダー */
+.section-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.section-header h5 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .main-container {
+        padding: 1rem;
+    }
+    
+    .stats-card {
+        margin-bottom: 1rem;
+    }
+    
+    .chart-card {
+        margin-bottom: 1rem;
+    }
+}
+</style>
 {% endblock %}
 
 {% block extra_js %}

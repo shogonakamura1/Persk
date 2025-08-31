@@ -695,6 +695,7 @@ def api_tasks_sorted(request):
                 'deadline': task.deadline.isoformat(),
                 'estimate_min': task.estimate_min,
                 'importance': task.importance,
+                'tags': task.tags,
                 'shared': task.shared,
                 'score': round(score, 3),
                 'has_subtasks': task.subtasks.exists()

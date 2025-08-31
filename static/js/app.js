@@ -27,11 +27,106 @@ async function api(url, method = 'GET', body = null) {
     if (!r.ok) {
         const errorText = await r.text();
         console.error(`API Error: ${r.status} ${r.statusText}`, errorText);
+        
+        // 401エラー（認証エラー）の場合はログアウト状態とみなす
+        if (r.status === 401) {
+            console.log('User is not authenticated, redirecting to login');
+            window.location.href = '/login/';
+            return;
+        }
+        
         throw new Error(errorText);
     }
     const response = await r.json();
     console.log(`API Response:`, response);
     return response;
+}
+
+// タスクタイマー更新
+function updateTaskTimers() {
+    state.tasks.forEach(task => {
+        if (task.status === 'doing' || task.status === 'paused') {
+            const timerElement = document.getElementById(`taskTimer${task.id}`);
+            if (timerElement) {
+                let totalSeconds = 0;
+                let shouldUpdate = true;
+                
+                if (state.running.taskId === task.id) {
+                    // 現在実行中のタスク
+                    if (state.running.startedAt) {
+                        if (state.running.paused) {
+                            // 一時停止状態の場合は記録された経過時間を使用
+                            totalSeconds = state.running.pausedSeconds || 0;
+                        } else {
+                            // 実行中の場合は現在時刻から計算
+                            const now = new Date();
+                            const startedAt = new Date(state.running.startedAt);
+                            totalSeconds = Math.floor((now - startedAt) / 1000);
+                        }
+                    }
+                } else if (task.status === 'paused') {
+                    // 一時停止状態のタスク（現在実行中ではない）は表示を更新しない
+                    shouldUpdate = false;
+                } else if (task.started_at && task.status === 'doing') {
+                    // 実行中のタスク（現在実行中ではない）の場合のみ時間計算
+                    const startedAt = new Date(task.started_at);
+                    const now = new Date();
+                    totalSeconds = Math.floor((now - startedAt) / 1000);
+                }
+                
+                if (shouldUpdate) {
+                    timerElement.textContent = formatTime(totalSeconds);
+                }
+            }
+        }
+    });
+}
+
+// 完了済みタスクの実際の時間を更新
+async function updateCompletedTaskTimes() {
+    const completedTasks = state.tasks.filter(task => task.status === 'done');
+    
+    for (const task of completedTasks) {
+        try {
+            const response = await api(`/api/tasks/${task.id}/focus-time/`);
+            if (response.ok) {
+                const actualMinutes = Math.ceil(response.total_seconds / 60);
+                const timeElement = document.getElementById(`actualTime${task.id}`);
+                if (timeElement) {
+                    timeElement.textContent = `${actualMinutes}分`;
+                }
+            }
+        } catch (error) {
+            console.error(`タスク ${task.id} の実際の時間取得エラー:`, error);
+        }
+    }
+}
+
+// 進捗表示更新
+function updateProgress() {
+    const totalTasks = state.tasks.length;
+    const completedTasks = state.tasks.filter(task => task.status === 'done').length;
+    const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    
+    // 進捗パーセンテージ更新
+    const progressPercentElement = document.getElementById('progressPercent');
+    if (progressPercentElement) {
+        progressPercentElement.textContent = `${progressPercent}%`;
+    }
+    
+    // 進捗説明更新
+    const progressDescriptionElement = document.getElementById('progressDescription');
+    if (progressDescriptionElement) {
+        progressDescriptionElement.textContent = `${completedTasks}個のタスクを完了`;
+    }
+    
+    // 進捗リングのアニメーション更新
+    const progressCircle = document.querySelector('.progress-ring .progress');
+    if (progressCircle) {
+        const circumference = 2 * Math.PI * 50; // r=50
+        const offset = circumference - (progressPercent / 100) * circumference;
+        progressCircle.style.strokeDashoffset = offset;
+    }
 }
 
 // ユーティリティ関数
@@ -145,9 +240,12 @@ function renderTaskList() {
     
     if (state.tasks.length === 0) {
         taskList.innerHTML = `
-            <div class="text-center text-muted">
-                <i class="bi bi-list-task" style="font-size: 2rem;"></i>
-                <p class="mt-2">タスクがありません</p>
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-list-task" style="font-size: 3rem; opacity: 0.3;"></i>
+                <p class="mt-3">タスクがありません</p>
+                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#taskModal">
+                    最初のタスクを作成
+                </button>
             </div>
         `;
         return;
@@ -159,64 +257,101 @@ function renderTaskList() {
         const hasSubtasks = task.subtasks && task.subtasks.length > 0;
         
         // デバッグ: 各タスクの情報
-        if (task.status === 'done') {
-            console.log(`タスク ${task.id} (${task.title}) - status: ${task.status}, shared: ${task.shared}`);
-        }
+        console.log(`タスク ${task.id} (${task.title}) - status: ${task.status}, hasSubtasks: ${hasSubtasks}`);
+        
+        // 重要度に基づくクラス名を決定
+        const priorityClass = task.importance >= 2 ? 'priority-high' : task.importance >= 1 ? 'priority-medium' : 'priority-low';
+        
+        // タグを配列に分割
+        const tags = task.tags ? task.tags.split(',').map(tag => tag.trim()) : [];
+        
+        // タグのデバッグ
+        console.log(`タスク ${task.id} のタグ処理:`, {
+            originalTags: task.tags,
+            parsedTags: tags
+        });
+        
+        // タグのHTML生成
+        const tagsHtml = tags.map(tag => {
+            const tagClass = tag.toLowerCase().includes('デザイン') || tag.toLowerCase().includes('重要') ? 'tag-design' :
+                           tag.toLowerCase().includes('会議') ? 'tag-meeting' :
+                           tag.toLowerCase().includes('開発') || tag.toLowerCase().includes('技術') ? 'tag-development' : 'tag-design';
+            return `<span class="task-tag ${tagClass}">${tag}</span>`;
+        }).join('');
+        
+        console.log(`タスク ${task.id} のタグHTML:`, tagsHtml);
         
         return `
-            <div class="task-item p-3 ${statusClass}" data-task-id="${task.id}">
-                <div class="row align-items-center">
-                    <div class="col">
-                        <div class="d-flex align-items-center" onclick="showTaskTimer(${task.id})" style="cursor: pointer;">
-                            <i class="bi ${getStatusIcon(task.status)} me-2"></i>
-                            <div>
-                                <h6 class="mb-1">${task.title}</h6>
-                                <div class="small text-muted">
-                                    ${getImportanceBadge(task.importance)} 
-                                    ${task.deadline ? `期限: ${formatDate(task.deadline)} ${formatRemainingTime(task.deadline)}` : ''}
-                                    ${task.estimate_min > 0 ? `・予想: ${task.estimate_min}分` : ''}
-                                    ${task.tags ? `・${task.tags}` : ''}
-                                </div>
-                            </div>
-                        </div>
+            <div class="task-card ${priorityClass}" data-task-id="${task.id}">
+                <div class="task-content">
+                    <div class="task-checkbox">
+                        <input type="checkbox" ${task.status === 'done' ? 'checked' : ''} 
+                               onchange="toggleTaskStatus(${task.id}, this.checked)">
                     </div>
-                    <div class="col-auto task-actions">
-                        ${!hasSubtasks ? `
-                            ${task.status === 'todo' ? `
-                                <button class="btn btn-success btn-sm me-1" onclick="event.stopPropagation(); startTask(${task.id})">
-                                    <i class="bi bi-play-fill"></i> 開始
-                                </button>
+                    <div class="task-info">
+                        <div class="task-title">${task.title}</div>
+                        ${tags.length > 0 ? `<div class="task-tags">${tagsHtml}</div>` : ''}
+                        <div class="task-meta">
+                            ${task.deadline ? `
+                                <div class="task-date">
+                                    <i class="bi bi-calendar"></i>
+                                    ${new Date(task.deadline).toLocaleDateString('ja-JP')}
+                                    ${formatDeadlineDisplay(task.deadline)}
+                                </div>
                             ` : ''}
-                            ${task.status === 'doing' ? `
-                                <button class="btn btn-warning btn-sm me-1" onclick="event.stopPropagation(); pauseTask(${task.id})">
-                                    <i class="bi bi-pause-fill"></i> 一時停止
-                                </button>
-                            ` : ''}
-                            ${task.status === 'paused' ? `
-                                <button class="btn btn-success btn-sm me-1" onclick="event.stopPropagation(); resumeTask(${task.id})">
-                                    <i class="bi bi-play-fill"></i> 再開
-                                </button>
+                            ${task.estimate_min > 0 ? `
+                                <div class="task-time">
+                                    <i class="bi bi-clock"></i>
+                                    ${task.status === 'done' ? `<span id="actualTime${task.id}">${task.estimate_min}分</span>` : `${task.estimate_min}分`}
+                                </div>
                             ` : ''}
                             ${(task.status === 'doing' || task.status === 'paused') ? `
-                                <button class="btn btn-warning btn-sm me-1" onclick="event.stopPropagation(); resetTaskTimer(${task.id})">
-                                    <i class="bi bi-arrow-clockwise"></i> リセット
-                                </button>
+                                <div class="task-timer">
+                                    <i class="bi bi-stopwatch"></i>
+                                    <span id="taskTimer${task.id}">00:00:00</span>
+                                </div>
                             ` : ''}
+                        </div>
+                    </div>
+                    <div class="task-actions" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                        ${task.status === 'todo' ? `
+                            <button class="task-action-btn" onclick="event.stopPropagation(); startTask(${task.id})" title="開始" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                                <i class="bi bi-play-fill"></i>
+                            </button>
+                        ` : ''}
+                        ${task.status === 'doing' ? `
+                            <button class="task-action-btn" onclick="event.stopPropagation(); pauseTask(${task.id})" title="一時停止" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                                <i class="bi bi-pause-fill"></i>
+                            </button>
+                        ` : ''}
+                        ${task.status === 'paused' ? `
+                            <button class="task-action-btn" onclick="event.stopPropagation(); resumeTask(${task.id})" title="再開" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                                <i class="bi bi-play-fill"></i>
+                            </button>
+                        ` : ''}
+                        ${(task.status === 'doing' || task.status === 'paused') ? `
+                            <button class="task-action-btn" onclick="event.stopPropagation(); resetTaskTimer(${task.id})" title="リセット" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
                         ` : ''}
                         ${task.status !== 'done' ? `
-                            <button class="btn btn-primary btn-sm me-1" onclick="event.stopPropagation(); completeTask(${task.id})">
-                                <i class="bi bi-check-lg"></i> 完了
+                            <button class="task-action-btn" onclick="event.stopPropagation(); completeTask(${task.id})" title="完了" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                                <i class="bi bi-check-lg"></i>
                             </button>
                         ` : ''}
                         ${task.status === 'done' ? `
-                            <button class="btn ${task.shared ? 'btn-info' : 'btn-outline-info'} btn-sm me-1" onclick="event.stopPropagation(); shareTask(${task.id})">
-                                <i class="bi bi-share${task.shared ? '-fill' : ''}"></i> ${task.shared ? '共有中' : '共有'}
+                            <button class="task-action-btn" onclick="event.stopPropagation(); shareTask(${task.id})" title="${task.shared ? '共有中' : '共有'}" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                                <i class="bi bi-share${task.shared ? '-fill' : ''}"></i>
                             </button>
                         ` : ''}
-
-                        <button class="btn btn-outline-danger btn-sm" onclick="event.stopPropagation(); deleteTask(${task.id})">
+                        <button class="task-action-btn" onclick="event.stopPropagation(); deleteTask(${task.id})" title="削除" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
                             <i class="bi bi-trash"></i>
                         </button>
+                        ${hasSubtasks ? `
+                            <button class="task-action-btn" onclick="event.stopPropagation(); toggleTaskDetails(${task.id})" title="詳細" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                                <i class="bi bi-chevron-down"></i>
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
                 <div class="collapse mt-3" id="taskDetails${task.id}">
@@ -299,6 +434,12 @@ function renderTaskList() {
     
     taskList.innerHTML = tasksHtml;
     
+    // 進捗表示を更新
+    updateProgress();
+    
+    // タスクタイマーを更新
+    updateTaskTimers();
+    
     // デバッグ: 生成されたHTMLを確認
     console.log('生成されたHTML:', tasksHtml);
     
@@ -317,6 +458,9 @@ function renderTaskList() {
     
     // Sortableを再初期化
     initializeSortable();
+    
+    // 完了済みタスクの実際の時間を更新
+    updateCompletedTaskTimes();
 }
 
 // 今の一手カード更新
@@ -377,103 +521,10 @@ function updateNowCard() {
     `;
 }
 
-// 固定バー更新
-function updateFocusBar() {
-    const focusBar = document.getElementById('focusBar');
-    const focusTaskName = document.getElementById('focusTaskName');
-    const focusTimer = document.getElementById('focusTimer');
-    const focusSubtaskBar = document.getElementById('focusSubtaskBar');
-    const focusSubtaskName = document.getElementById('focusSubtaskName');
-    const focusSubtaskTimer = document.getElementById('focusSubtaskTimer');
-    
-    // 何も実行中でない場合は非表示
-    if (!state.running.taskId && !state.runningSubtask.subtaskId) {
-        focusBar.style.display = 'none';
-        return;
-    }
-    
-    focusBar.style.display = 'block';
-    
-    // サブタスクが実行中または一時停止中の場合はサブタスクを優先表示
-    if (state.runningSubtask.subtaskId) {
-        // サブタスク表示
-        focusSubtaskBar.style.display = 'block';
-        
-        let subtask = null;
-        for (const task of state.tasks) {
-            subtask = task.subtasks.find(s => s.id === state.runningSubtask.subtaskId);
-            if (subtask) break;
-        }
-        
-        if (subtask) {
-            focusSubtaskName.textContent = subtask.title;
-            
-            // タイマー更新
-            if (state.runningSubtask.startedAt) {
-                if (state.runningSubtask.paused) {
-                    // 一時停止状態では記録された経過時間を表示
-                    focusSubtaskTimer.classList.add('text-muted');
-                    focusSubtaskTimer.innerHTML = formatTime(state.runningSubtask.pausedSeconds) + ' <i class="bi bi-pause-fill"></i>';
-                } else {
-                    // 実行中はリアルタイムで更新
-                    const elapsed = Math.floor((Date.now() - new Date(state.runningSubtask.startedAt).getTime()) / 1000);
-                    focusSubtaskTimer.classList.remove('text-muted');
-                    focusSubtaskTimer.innerHTML = formatTime(elapsed);
-                }
-            }
-        }
-        
-        // タスク表示は非表示
-        focusTaskName.textContent = '';
-        focusTimer.innerHTML = '';
-        document.getElementById('focusStopBtn').style.display = 'none';
-        document.getElementById('focusStartBtn').style.display = 'none';
-        
-    } else if (state.running.taskId) {
-        // タスク表示
-        focusSubtaskBar.style.display = 'none';
-        
-        const task = state.tasks.find(t => t.id === state.running.taskId);
-        if (task) {
-            focusTaskName.textContent = task.title;
-            
-            // タイマー更新
-            if (state.running.startedAt) {
-                if (state.running.paused) {
-                    // 一時停止状態では記録された経過時間を表示
-                    focusTimer.classList.add('text-muted');
-                    focusTimer.innerHTML = formatTime(state.running.pausedSeconds) + ' <i class="bi bi-pause-fill"></i>';
-                    // ボタン表示を切り替え
-                    document.getElementById('focusStopBtn').style.display = 'none';
-                    document.getElementById('focusStartBtn').style.display = 'inline-block';
-                    
-                    // ボタンの文字を状況に応じて変更
-                    const startBtn = document.getElementById('focusStartBtn');
-                    if (state.running.pausedSeconds > 0) {
-                        startBtn.innerHTML = '<i class="bi bi-play-fill"></i> 再開';
-                    } else {
-                        startBtn.innerHTML = '<i class="bi bi-play-fill"></i> 開始';
-                    }
-                } else {
-                    // 実行中はリアルタイムで更新
-                    const elapsed = Math.floor((Date.now() - new Date(state.running.startedAt).getTime()) / 1000);
-                    focusTimer.classList.remove('text-muted');
-                    focusTimer.innerHTML = formatTime(elapsed);
-                    // ボタン表示を切り替え
-                    document.getElementById('focusStopBtn').style.display = 'inline-block';
-                    document.getElementById('focusStartBtn').style.display = 'none';
-                }
-            }
-        }
-    }
-}
+
 
 // タイマー更新（requestAnimationFrame）
 function updateTimer() {
-    if ((state.running.taskId && state.running.startedAt && !state.running.paused) ||
-        (state.runningSubtask.subtaskId && state.runningSubtask.startedAt && !state.runningSubtask.paused)) {
-        updateFocusBar();
-    }
     requestAnimationFrame(updateTimer);
 }
 
@@ -517,7 +568,6 @@ async function startTask(taskId) {
             }
             
             renderTaskList();
-            updateFocusBar();
         } else {
             throw new Error(response.error || 'タスクの開始に失敗しました');
         }
@@ -558,8 +608,8 @@ async function pauseTask(taskId) {
                 task.status = 'paused';
             }
             
-            renderTaskList();
-            updateFocusBar();
+            // ボタンの表示を更新
+            updateTaskButtons(taskId);
         } else {
             throw new Error(response.error || 'タスクの一時停止に失敗しました');
         }
@@ -594,14 +644,38 @@ async function resumeTask(taskId) {
                 task.started_at = state.running.startedAt;
             }
             
-            renderTaskList();
-            updateFocusBar();
+            // ボタンの表示を更新
+            updateTaskButtons(taskId);
         } else {
             throw new Error(response.error || 'タスクの再開に失敗しました');
         }
     } catch (error) {
         console.error('タスク再開エラー:', error);
         alert('タスクの再開に失敗しました: ' + error.message);
+    }
+}
+
+// タスクステータス切り替え
+async function toggleTaskStatus(taskId, isCompleted) {
+    try {
+        const newStatus = isCompleted ? 'done' : 'todo';
+        await api(`/api/tasks/${taskId}/update/`, 'POST', { status: newStatus });
+        
+        // ローカル状態を更新
+        const task = state.tasks.find(t => t.id === taskId);
+        if (task) {
+            task.status = newStatus;
+            if (newStatus === 'done') {
+                task.completed_at = new Date().toISOString();
+            } else {
+                task.completed_at = null;
+            }
+        }
+        
+        renderTaskList();
+    } catch (error) {
+        console.error('タスクステータス更新エラー:', error);
+        alert('タスクステータスの更新に失敗しました');
     }
 }
 
@@ -625,7 +699,6 @@ async function completeTask(taskId) {
         }
         
         renderTaskList();
-        updateFocusBar();
         loadMetrics();
     } catch (error) {
         console.error('タスク完了エラー:', error);
@@ -651,7 +724,6 @@ async function deleteTask(taskId) {
         state.tasks = state.tasks.filter(t => t.id !== taskId);
         
         renderTaskList();
-        updateFocusBar();
     } catch (error) {
         console.error('タスク削除エラー:', error);
         alert('タスクの削除に失敗しました');
@@ -663,6 +735,89 @@ function toggleTaskDetails(taskId) {
     const details = document.getElementById(`taskDetails${taskId}`);
     if (details) {
         const bsCollapse = new bootstrap.Collapse(details, { toggle: true });
+    }
+}
+
+// タスクボタンの表示を更新
+function updateTaskButtons(taskId) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    // タスクカード内のアクションボタンを更新
+    const taskCard = document.querySelector(`[data-task-id="${taskId}"]`);
+    if (!taskCard) return;
+    
+    const actionsContainer = taskCard.querySelector('.task-actions');
+    if (!actionsContainer) return;
+    
+    // サブタスクの有無を確認
+    const hasSubtasks = task.subtasks && task.subtasks.length > 0;
+    
+    // 既存のボタンを全て削除
+    actionsContainer.innerHTML = '';
+    
+    // 開始/一時停止/再開ボタン
+    if (task.status === 'todo') {
+        actionsContainer.innerHTML += `
+            <button class="task-action-btn" onclick="event.stopPropagation(); startTask(${taskId})" title="開始" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                <i class="bi bi-play-fill"></i>
+            </button>
+        `;
+    } else if (task.status === 'doing') {
+        actionsContainer.innerHTML += `
+            <button class="task-action-btn" onclick="event.stopPropagation(); pauseTask(${taskId})" title="一時停止" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                <i class="bi bi-pause-fill"></i>
+            </button>
+        `;
+    } else if (task.status === 'paused') {
+        actionsContainer.innerHTML += `
+            <button class="task-action-btn" onclick="event.stopPropagation(); resumeTask(${taskId})" title="再開" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                <i class="bi bi-play-fill"></i>
+            </button>
+        `;
+    }
+    
+    // リセットボタン（実行中または一時停止中の場合）
+    if (task.status === 'doing' || task.status === 'paused') {
+        actionsContainer.innerHTML += `
+            <button class="task-action-btn" onclick="event.stopPropagation(); resetTaskTimer(${taskId})" title="リセット" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        `;
+    }
+    
+    // 完了ボタン（完了していない場合）
+    if (task.status !== 'done') {
+        actionsContainer.innerHTML += `
+            <button class="task-action-btn" onclick="event.stopPropagation(); completeTask(${taskId})" title="完了" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                <i class="bi bi-check-lg"></i>
+            </button>
+        `;
+    }
+    
+    // 共有ボタン（完了している場合）
+    if (task.status === 'done') {
+        actionsContainer.innerHTML += `
+            <button class="task-action-btn" onclick="event.stopPropagation(); shareTask(${taskId})" title="${task.shared ? '共有中' : '共有'}" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                <i class="bi bi-share${task.shared ? '-fill' : ''}"></i>
+            </button>
+        `;
+    }
+    
+    // 削除ボタン
+    actionsContainer.innerHTML += `
+        <button class="task-action-btn" onclick="event.stopPropagation(); deleteTask(${taskId})" title="削除" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+            <i class="bi bi-trash"></i>
+        </button>
+    `;
+    
+    // 詳細ボタン（サブタスクがある場合）
+    if (hasSubtasks) {
+        actionsContainer.innerHTML += `
+            <button class="task-action-btn" onclick="event.stopPropagation(); toggleTaskDetails(${taskId})" title="詳細" style="display: flex !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10 !important;">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+        `;
     }
 }
 
@@ -687,7 +842,6 @@ function resetTaskTimer(taskId) {
         }
         
         renderTaskList();
-        updateFocusBar();
     }
 }
 
@@ -765,7 +919,6 @@ async function showTaskTimer(taskId) {
         state.running.paused = true; // 一時停止状態で表示
         
         renderTaskList();
-        updateFocusBar();
         
         // 詳細画面を開く
         if (details) {
@@ -832,7 +985,6 @@ async function startSubtask(subtaskId) {
             updateSubtaskInState(subtaskId, 'doing', response.started_at);
             
             renderTaskList();
-            updateFocusBar();
         } else {
             throw new Error(response.error || 'サブタスクの開始に失敗しました');
         }
@@ -871,7 +1023,6 @@ async function pauseSubtask(subtaskId) {
             updateSubtaskInState(subtaskId, 'paused', null);
             
             renderTaskList();
-            updateFocusBar();
         } else {
             throw new Error(response.error || 'サブタスクの一時停止に失敗しました');
         }
@@ -913,7 +1064,6 @@ async function resumeSubtask(subtaskId) {
             updateSubtaskInState(subtaskId, 'doing', state.runningSubtask.startedAt);
             
             renderTaskList();
-            updateFocusBar();
         } else {
             throw new Error(response.error || 'サブタスクの再開に失敗しました');
         }
@@ -940,7 +1090,6 @@ async function completeSubtask(subtaskId) {
         updateSubtaskInState(subtaskId, 'done', null, response.completed_at);
         
         renderTaskList();
-        updateFocusBar();
     } catch (error) {
         console.error('サブタスク完了エラー:', error);
         alert('サブタスクの完了に失敗しました');
@@ -979,7 +1128,6 @@ function resetSubtaskTimer(subtaskId) {
         updateSubtaskInState(subtaskId, 'paused', state.runningSubtask.startedAt);
         
         renderTaskList();
-        updateFocusBar();
     }
 }
 
@@ -1194,6 +1342,7 @@ async function loadMetrics() {
         document.getElementById('streakCount').textContent = response.streak.days;
     } catch (error) {
         console.error('メトリクス読み込みエラー:', error);
+        // エラーメッセージは表示しない
     }
 }
 
@@ -1234,9 +1383,9 @@ async function loadTasks() {
         
         console.log('Final state:', state);
         renderTaskList();
-        updateFocusBar();
     } catch (error) {
         console.error('タスク読み込みエラー:', error);
+        // エラーメッセージは表示しない
     }
 }
 
@@ -1250,17 +1399,65 @@ async function loadProfile() {
             subType: response.sub_type
         };
         updateNowCard();
+        
+        // ナビゲーションバーのタイプ表示を更新
+        updateUserTypeDisplay();
     } catch (error) {
         console.error('プロフィール読み込みエラー:', error);
+        // エラーメッセージは表示しない
+    }
+}
+
+// ユーザータイプ表示を更新
+function updateUserTypeDisplay() {
+    const typeDisplay = document.getElementById('userTypeDisplay');
+    if (!typeDisplay) return;
+    
+    const typeNames = {
+        'planner': 'プランナー',
+        'sprinter': 'スプリンター',
+        'flow': 'フロー'
+    };
+    
+    const typeIcons = {
+        'planner': 'bi-calendar-check',
+        'sprinter': 'bi-lightning-charge',
+        'flow': 'bi-water'
+    };
+    
+    if (state.user.mainType && typeNames[state.user.mainType]) {
+        const typeName = typeNames[state.user.mainType];
+        const icon = typeIcons[state.user.mainType] || 'bi-person';
+        typeDisplay.innerHTML = `<i class="bi ${icon} me-1"></i>${typeName}`;
+    } else {
+        typeDisplay.innerHTML = '<i class="bi bi-person me-1"></i>未診断';
     }
 }
 
 // 診断関連
 function startDiagnosis() {
+    // 診断開始画面を表示
+    showDiagnosisStartScreen();
+}
+
+function showDiagnosisStartScreen() {
     const diagContent = document.getElementById('diagContent');
     diagContent.innerHTML = `
-        <div class="progress-indicator">
-            <div class="progress-bar" style="width: 0%"></div>
+        <div class="diagnosis-start">
+            <h4>あなたの作業スタイルを診断します</h4>
+            <p>7つの質問に答えて、最適なタスク管理方法を見つけましょう</p>
+            <button class="diagnosis-start-btn" onclick="beginDiagnosis()">
+                <i class="bi bi-play-fill me-2"></i> 診断開始
+            </button>
+        </div>
+    `;
+}
+
+function beginDiagnosis() {
+    const diagContent = document.getElementById('diagContent');
+    diagContent.innerHTML = `
+        <div class="diagnosis-progress">
+            <div class="diagnosis-progress-bar" style="width: 0%"></div>
         </div>
         <div id="diagnosisQuestions">
             ${getDiagnosisQuestions()}
@@ -1340,11 +1537,11 @@ function getDiagnosisQuestions() {
     return questions.map(q => `
         <div class="diagnosis-question" id="question${q.q}">
             <h5>質問 ${q.q}/7</h5>
-            <p class="mb-4">${q.text}</p>
-            <div class="d-grid gap-2">
+            <p>${q.text}</p>
+            <div class="d-grid gap-3">
                 ${q.options.map(opt => `
-                    <button class="btn btn-outline-primary text-start" onclick="selectAnswer(${q.q}, '${opt.key}')">
-                        ${opt.key}. ${opt.text}
+                    <button class="diagnosis-option" onclick="selectAnswer(${q.q}, '${opt.key}')">
+                        <strong>${opt.key}.</strong> ${opt.text}
                     </button>
                 `).join('')}
             </div>
@@ -1366,7 +1563,7 @@ function showDiagnosisQuestion(qNum) {
     
     // プログレスバー更新
     const progress = ((qNum - 1) / 7) * 100;
-    const progressBar = document.querySelector('.progress-bar');
+    const progressBar = document.querySelector('.diagnosis-progress-bar');
     if (progressBar) {
         progressBar.style.width = `${progress}%`;
     }
@@ -1395,11 +1592,10 @@ async function submitDiagnosis() {
         // 今の一手カード更新
         updateNowCard();
         
-        // モーダルを閉じる
-        const modal = bootstrap.Modal.getInstance(document.getElementById('diagModal'));
-        modal.hide();
+        // ナビゲーションバーのタイプ表示を更新
+        updateUserTypeDisplay();
         
-        // 診断結果を表示
+        // 診断結果をモーダル内に表示
         showDiagnosisResult(response.main_type, response.sub_type);
         
     } catch (error) {
@@ -1415,24 +1611,42 @@ function showDiagnosisResult(mainType, subType) {
         'flow': 'フロー'
     };
     
-    const result = `
-        <div class="alert alert-success">
-            <h5>診断結果</h5>
-            <p>あなたのタイプ: <strong>${typeNames[mainType]}</strong></p>
-            ${subType ? `<p>サブタイプ: <strong>${subType}</strong></p>` : ''}
+    const typeDescriptions = {
+        'planner': '計画的にタスクを進めるタイプです。詳細な計画を立てて、順序立てて作業を進めることが得意です。',
+        'sprinter': '短時間集中で効率的にタスクをこなすタイプです。時間制限を設けて、集中して作業を進めることが得意です。',
+        'flow': 'リラックスして自然な流れで作業するタイプです。無理のないペースで、継続的に作業を進めることが得意です。'
+    };
+    
+    const typeIcons = {
+        'planner': 'bi-calendar-check',
+        'sprinter': 'bi-lightning-charge',
+        'flow': 'bi-water'
+    };
+    
+    const mainTypeName = typeNames[mainType] || mainType;
+    const description = typeDescriptions[mainType] || '';
+    const icon = typeIcons[mainType] || 'bi-person';
+    
+    const resultHtml = `
+        <div class="diagnosis-result">
+            <div class="diagnosis-result-icon">
+                <i class="bi ${icon}"></i>
+            </div>
+            <h4>あなたのタイプ: ${mainTypeName}</h4>
+            <p>${description}</p>
+            <div class="d-flex gap-3 justify-content-center">
+                <button class="diagnosis-result-btn" onclick="closeDiagnosisModal()">
+                    <i class="bi bi-check-lg me-2"></i> 完了
+                </button>
+                <button class="diagnosis-result-btn" onclick="retakeDiagnosis()">
+                    <i class="bi bi-arrow-clockwise me-2"></i> 再診断
+                </button>
+            </div>
         </div>
     `;
     
-    // 結果を表示（例：ページ上部に一時的に表示）
-    const container = document.querySelector('.container');
-    if (container) {
-        const resultDiv = document.createElement('div');
-        resultDiv.innerHTML = result;
-        container.insertBefore(resultDiv, container.firstChild);
-        
-        // 3秒後に削除
-        setTimeout(() => resultDiv.remove(), 3000);
-    }
+    const diagContent = document.getElementById('diagContent');
+    diagContent.innerHTML = resultHtml;
 }
 
 // 設定関連
@@ -1441,11 +1655,26 @@ function showSettings() {
     modal.show();
 }
 
+function closeDiagnosisModal() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('diagModal'));
+    modal.hide();
+}
+
 function retakeDiagnosis() {
     diagnosisAnswers = [];
     const modal = new bootstrap.Modal(document.getElementById('diagModal'));
     modal.show();
-    startDiagnosis();
+    // 診断モーダルを初期状態に戻す
+    const diagContent = document.getElementById('diagContent');
+    diagContent.innerHTML = `
+        <div class="diagnosis-start">
+            <h4>あなたの作業スタイルを診断します</h4>
+            <p>7つの質問に答えて、最適なタスク管理方法を見つけましょう</p>
+            <button class="diagnosis-start-btn" onclick="beginDiagnosis()">
+                <i class="bi bi-play-fill me-2"></i> 診断開始
+            </button>
+        </div>
+    `;
 }
 
 // サブタスクモーダルを開く
@@ -1476,6 +1705,7 @@ async function loadSortedTasks(type = null) {
                     estimate_min: item.estimate_min,
                     importance: item.importance,
                     status: item.status,
+                    tags: item.tags,
                     shared: item.shared || false,
                     score: item.score,
                     subtasks: []
@@ -1507,6 +1737,11 @@ async function loadSortedTasks(type = null) {
         console.log('全タスク:', parentTasks);
         console.log('APIレスポンス:', response);
         
+        // タグ情報のデバッグ
+        parentTasks.forEach(task => {
+            console.log(`タスク ${task.id} (${task.title}) のタグ:`, task.tags);
+        });
+        
         renderTaskList();
         
         // ソート設定を更新
@@ -1514,7 +1749,7 @@ async function loadSortedTasks(type = null) {
         
     } catch (error) {
         console.error('Failed to load sorted tasks:', error);
-        showError('ソート済みタスクの読み込みに失敗しました');
+        // エラーメッセージは表示しない
     }
 }
 
@@ -1658,6 +1893,67 @@ function addDragHandles() {
     });
 }
 
+// 締め切り時間の表示を計算
+function formatDeadlineDisplay(deadline) {
+    if (!deadline) return '';
+    
+    const now = new Date();
+    const deadlineDate = new Date(deadline);
+    const diffMs = deadlineDate - now;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffMs < 0) {
+        // 締め切りを過ぎている場合（赤文字）
+        const overdueDays = Math.abs(diffDays);
+        const overdueHours = Math.abs(diffHours);
+        const overdueMinutes = Math.abs(diffMinutes);
+        
+        if (overdueDays > 0) {
+            return `<span class="text-danger fw-bold">${overdueDays}日超過</span>`;
+        } else if (overdueHours > 0) {
+            return `<span class="text-danger fw-bold">${overdueHours}時間${overdueMinutes}分超過</span>`;
+        } else {
+            return `<span class="text-danger fw-bold">${overdueMinutes}分超過</span>`;
+        }
+    } else {
+        // 締め切り前の場合
+        if (diffDays > 0) {
+            return `<span class="text-info">残り${diffDays}日${diffHours}時間</span>`;
+        } else if (diffHours >= 3) {
+            return `<span class="text-info">残り${diffHours}時間${diffMinutes}分</span>`;
+        } else if (diffHours > 0 || diffMinutes > 0) {
+            return `<span class="text-warning fw-bold">残り${diffHours}時間${diffMinutes}分</span>`;
+        } else {
+            return `<span class="text-danger fw-bold">期限切れ</span>`;
+        }
+    }
+}
+
+// 締め切り時間の表示を定期的に更新
+function updateDeadlineDisplays() {
+    state.tasks.forEach(task => {
+        if (task.deadline) {
+            const taskCard = document.querySelector(`[data-task-id="${task.id}"]`);
+            if (taskCard) {
+                const dateElement = taskCard.querySelector('.task-date');
+                if (dateElement) {
+                    const icon = dateElement.querySelector('i');
+                    const dateText = new Date(task.deadline).toLocaleDateString('ja-JP');
+                    const deadlineDisplay = formatDeadlineDisplay(task.deadline);
+                    
+                    dateElement.innerHTML = `
+                        ${icon.outerHTML}
+                        ${dateText}
+                        ${deadlineDisplay}
+                    `;
+                }
+            }
+        }
+    });
+}
+
 // 残り時間を定期的に更新
 function updateRemainingTimes() {
     const taskItems = document.querySelectorAll('.task-item');
@@ -1690,6 +1986,8 @@ function updateRemainingTimes() {
 function startRemainingTimeUpdates() {
     // 1分ごとに更新
     setInterval(updateRemainingTimes, 60000);
+    // 締め切り時間の表示も1分ごとに更新
+    setInterval(updateDeadlineDisplays, 60000);
 }
 
 // ユーティリティ関数
@@ -1794,6 +2092,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // タイマー開始
     requestAnimationFrame(updateTimer);
     
+    // タスクタイマー更新の定期実行
+    setInterval(updateTaskTimers, 1000);
+    
     // 自動ソート開始
     startAutoSort();
 
@@ -1813,7 +2114,7 @@ document.addEventListener('DOMContentLoaded', function() {
             createSubtask(parseInt(taskId));
         }
     });
-    document.getElementById('startDiagnosisBtn')?.addEventListener('click', startDiagnosis);
+    // startDiagnosisBtnのイベントリスナーは削除（onclick属性で直接呼び出し）
     document.getElementById('saveSettingsBtn')?.addEventListener('click', () => {
         // 設定保存処理
         const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
@@ -1832,42 +2133,4 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     document.getElementById('sortNowBtn')?.addEventListener('click', recomputeOrder);
-    
-    // 固定バーのボタン
-    document.getElementById('focusStopBtn')?.addEventListener('click', () => {
-        if (state.running.taskId) {
-            pauseTask(state.running.taskId);
-        }
-    });
-    
-    document.getElementById('focusStartBtn')?.addEventListener('click', () => {
-        if (state.running.taskId) {
-            resumeTask(state.running.taskId);
-        }
-    });
-    
-    document.getElementById('focusCompleteBtn')?.addEventListener('click', () => {
-        if (state.running.taskId) {
-            completeTask(state.running.taskId);
-        }
-    });
-    
-    // サブタスク用のボタン
-    document.getElementById('subtaskFocusStopBtn')?.addEventListener('click', () => {
-        if (state.runningSubtask.subtaskId) {
-            pauseSubtask(state.runningSubtask.subtaskId);
-        }
-    });
-    
-    document.getElementById('subtaskFocusStartBtn')?.addEventListener('click', () => {
-        if (state.runningSubtask.subtaskId) {
-            resumeSubtask(state.runningSubtask.subtaskId);
-        }
-    });
-    
-    document.getElementById('subtaskFocusCompleteBtn')?.addEventListener('click', () => {
-        if (state.runningSubtask.subtaskId) {
-            completeSubtask(state.runningSubtask.subtaskId);
-        }
-    });
 });

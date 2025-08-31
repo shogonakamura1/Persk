@@ -2,96 +2,820 @@
 
 {% block title %}Persk - ホーム{% endblock %}
 
-{% block content %}
-<!-- Progress Section -->
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="card-title">今日の進捗</h5>
-                <div class="progress-ring-container">
-                    <svg id="progressRing" width="120" height="120">
-                        <circle cx="60" cy="60" r="50" fill="none" stroke="#e9ecef" stroke-width="8"/>
-                        <circle id="progressCircle" cx="60" cy="60" r="50" fill="none" stroke="#007bff" stroke-width="8" 
-                                stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/>
-                    </svg>
-                    <div class="progress-text">
-                        <span id="progressPercent">0%</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="card-title">連続達成</h5>
-                <div class="streak-container">
-                    <i class="bi bi-fire text-danger" style="font-size: 3rem;"></i>
-                    <div class="streak-text">
-                        <span id="streakCount">0</span> 日
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+{% block extra_css %}
+<style>
+/* タスク画面専用スタイル */
+body {
+    background-color: #f8f9fa;
+}
 
-<!-- Now Card Section -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">今の一手</h5>
-                <div id="nowCard">
-                    <div class="text-center text-muted">
-                        <i class="bi bi-question-circle" style="font-size: 2rem;"></i>
-                        <p class="mt-2">診断を受けてあなたのタイプを確認しましょう</p>
-                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#diagModal">
-                            <i class="bi bi-clipboard-check"></i> 診断を開始
+.main-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* 左側メインカラム */
+.main-column {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+}
+
+/* ヘッダー部分 */
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.header-text h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #333;
+    margin: 0;
+}
+
+.header-text p {
+    color: #666;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.create-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.create-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+    color: white;
+}
+
+/* ヘッダーアクション */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* ソートコントロール */
+
+
+
+.sort-toggle {
+    display: flex;
+    align-items: center;
+}
+
+.sort-toggle .form-check {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sort-toggle .form-check-input {
+    margin: 0;
+    width: 2rem;
+    height: 1rem;
+    background-color: #dee2e6;
+    border: none;
+    border-radius: 1rem;
+}
+
+.sort-toggle .form-check-input:checked {
+    background-color: #667eea;
+    border-color: #667eea;
+}
+
+.sort-toggle .form-check-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #666;
+    margin: 0;
+}
+
+#sortNowBtn {
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.25rem 0.75rem;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+#sortNowBtn:hover {
+    transform: translateY(-1px);
+}
+
+#sortNowBtn:disabled {
+    background: #f8f9fa;
+    color: #6c757d;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* 性格診断モーダル */
+.diagnosis-modal .modal-content {
+    border: none;
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(102, 126, 234, 0.15);
+}
+
+.diagnosis-modal .modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 20px 20px 0 0;
+    border: none;
+    padding: 2rem;
+}
+
+.diagnosis-modal .modal-header .modal-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.diagnosis-modal .modal-header .btn-close {
+    filter: invert(1);
+    opacity: 0.8;
+}
+
+.diagnosis-modal .modal-body {
+    padding: 3rem 2rem;
+    background: #fafbfc;
+}
+
+.diagnosis-modal .modal-footer {
+    border: none;
+    padding: 2rem;
+    background: #fafbfc;
+}
+
+/* 診断開始画面 */
+.diagnosis-start {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.diagnosis-start h4 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.diagnosis-start p {
+    font-size: 1.1rem;
+    color: #666;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.diagnosis-start-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.diagnosis-start-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);
+    color: white;
+}
+
+/* プログレスバー */
+.diagnosis-progress {
+    background: #e9ecef;
+    border-radius: 10px;
+    height: 8px;
+    margin-bottom: 2rem;
+    overflow: hidden;
+}
+
+.diagnosis-progress-bar {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+/* 質問カード */
+.diagnosis-question {
+    display: none;
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    margin-bottom: 1rem;
+}
+
+.diagnosis-question.active {
+    display: block;
+    animation: fadeInUp 0.5s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.diagnosis-question h5 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #667eea;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.diagnosis-question h5::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 2px;
+}
+
+.diagnosis-question p {
+    font-size: 1.1rem;
+    color: #333;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+}
+
+/* 選択肢ボタン */
+.diagnosis-option {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: left;
+    font-size: 1rem;
+    color: #333;
+    transition: all 0.3s ease;
+    margin-bottom: 1rem;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.diagnosis-option:hover {
+    border-color: #667eea;
+    background: #f8f9ff;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.15);
+}
+
+.diagnosis-option.selected {
+    border-color: #667eea;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.diagnosis-option::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: -1;
+}
+
+.diagnosis-option:hover::before {
+    opacity: 0.05;
+}
+
+.diagnosis-option.selected::before {
+    opacity: 1;
+}
+
+/* 診断結果 */
+.diagnosis-result {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.diagnosis-result-icon {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 2rem;
+    color: white;
+    font-size: 2rem;
+}
+
+.diagnosis-result h4 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 1rem;
+}
+
+.diagnosis-result p {
+    font-size: 1.1rem;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+}
+
+.diagnosis-result-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.diagnosis-result-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);
+    color: white;
+}
+
+/* タスクカード */
+.task-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.task-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #dee2e6;
+}
+
+.task-card.priority-high::before {
+    background: #dc3545;
+}
+
+.task-card.priority-medium::before {
+    background: #28a745;
+}
+
+.task-card.priority-low::before {
+    background: #ffc107;
+}
+
+.task-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.task-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.task-checkbox {
+    margin-top: 0.25rem;
+}
+
+.task-checkbox input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #dee2e6;
+    cursor: pointer;
+}
+
+.task-checkbox input[type="checkbox"]:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.task-info {
+    flex: 1;
+}
+
+.task-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+.task-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.task-date, .task-time, .task-timer {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.task-timer {
+    color: #667eea;
+    font-weight: 500;
+}
+
+.task-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.task-tag {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: #f8f9fa;
+    color: #6c757d;
+    border: 1px solid #dee2e6;
+}
+
+.task-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.task-action-btn {
+    background: none;
+    border: none;
+    color: #666;
+    padding: 0.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 1.1rem;
+    min-width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.task-action-btn:hover {
+    background: #f8f9fa;
+    color: #333;
+    transform: scale(1.1);
+}
+
+.task-action-btn:active {
+    transform: scale(0.95);
+}
+
+/* 右側サイドバー */
+.sidebar {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    height: fit-content;
+}
+
+.sidebar-section {
+    margin-bottom: 2rem;
+}
+
+.sidebar-section:last-child {
+    margin-bottom: 0;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.sidebar-icon {
+    width: 32px;
+    height: 32px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #667eea;
+}
+
+.sidebar-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+/* 進捗セクション */
+.progress-container {
+    text-align: center;
+}
+
+.progress-ring {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 1rem;
+}
+
+.progress-ring svg {
+    transform: rotate(-90deg);
+}
+
+.progress-ring circle {
+    fill: none;
+    stroke-width: 8;
+}
+
+.progress-ring .bg {
+    stroke: #e9ecef;
+}
+
+.progress-ring .progress {
+    stroke: #667eea;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s ease;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.progress-description {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+/* クイックアクション */
+.quick-action-btn {
+    width: 100%;
+    padding: 1rem;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    color: #333;
+}
+
+.quick-action-btn:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.quick-action-btn:last-child {
+    margin-bottom: 0;
+}
+
+.quick-action-icon {
+    width: 32px;
+    height: 32px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #667eea;
+    transition: all 0.3s ease;
+}
+
+.quick-action-btn:hover .quick-action-icon {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.quick-action-text {
+    font-weight: 500;
+    flex: 1;
+    text-align: left;
+}
+
+/* レスポンシブ */
+@media (max-width: 768px) {
+    .main-container {
+        padding: 1rem;
+    }
+    
+    .task-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+        gap: 1rem;
+        width: 100%;
+    }
+    
+
+    
+
+    
+    .create-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .task-meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <div class="row">
+        <!-- 左側メインカラム -->
+        <div class="col-lg-8">
+            <div class="main-column">
+                <!-- ヘッダー -->
+                <div class="task-header">
+                    <div class="header-left">
+                        <div class="header-icon">
+                            <i class="bi bi-target"></i>
+                        </div>
+                        <div class="header-text">
+                            <h2>今日のタスク</h2>
+                            <p>効率的に進めましょう</p>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <!-- ソート設定 -->
+                        <div class="sort-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoSortToggle">
+                                <label class="form-check-label" for="autoSortToggle">
+                                    自動ソート
+                                </label>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline-secondary btn-sm" id="sortNowBtn">
+                            <i class="bi bi-arrow-clockwise"></i> ソート更新
+                        </button>
+                        <button class="create-btn" data-bs-toggle="modal" data-bs-target="#taskModal">
+                            <i class="bi bi-plus-lg"></i>
+                            新規作成
+                        </button>
+                    </div>
+                </div>
+
+                <!-- タスクリスト -->
+                <div id="taskList">
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-list-task" style="font-size: 3rem; opacity: 0.3;"></i>
+                        <p class="mt-3">タスクがありません</p>
+                        <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#taskModal">
+                            最初のタスクを作成
                         </button>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-<!-- Task List Section -->
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="card-title mb-0">タスク一覧</h5>
-                <div class="d-flex align-items-center gap-2">
-                    <!-- ソートUI -->
-                    <div class="btn-group" role="group">
-                        <select id="sortTypeSelect" class="form-select form-select-sm" style="width: auto;">
-                            <option value="planner">Planner</option>
-                            <option value="sprinter">Sprinter</option>
-                            <option value="flow">Flow</option>
-                        </select>
+        <!-- 右側サイドバー -->
+        <div class="col-lg-4">
+            <div class="sidebar">
+                <!-- 今日の進捗 -->
+                <div class="sidebar-section">
+                    <div class="sidebar-header">
+                        <div class="sidebar-icon">
+                            <i class="bi bi-bar-chart"></i>
+                        </div>
+                        <h3 class="sidebar-title">今日の進捗</h3>
                     </div>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="autoSortToggle">
-                        <label class="form-check-label" for="autoSortToggle">
-                            自動ソート
-                        </label>
+                    <div class="progress-container">
+                        <div class="progress-ring">
+                            <svg width="120" height="120">
+                                <circle class="bg" cx="60" cy="60" r="50"></circle>
+                                <circle class="progress" cx="60" cy="60" r="50" 
+                                        stroke-dasharray="314" stroke-dashoffset="314"></circle>
+                            </svg>
+                            <div class="progress-text">
+                                <span id="progressPercent">0%</span>
+                            </div>
+                        </div>
+                        <p class="progress-description" id="progressDescription">0個のタスクを完了</p>
                     </div>
-                    <button id="sortNowBtn" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-arrow-clockwise"></i> ソート更新
-                    </button>
-                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#taskModal">
-                        <i class="bi bi-plus-lg"></i> 新規タスク
-                    </button>
                 </div>
-            </div>
-            <div class="card-body">
-                <div id="taskList">
-                    <div class="text-center text-muted">
-                        <i class="bi bi-list-task" style="font-size: 2rem;"></i>
-                        <p class="mt-2">タスクがありません</p>
+
+                <!-- クイックアクション -->
+                <div class="sidebar-section">
+                    <div class="sidebar-header">
+                        <div class="sidebar-icon">
+                            <i class="bi bi-gear"></i>
+                        </div>
+                        <h3 class="sidebar-title">クイックアクション</h3>
                     </div>
+                    <a href="#" class="quick-action-btn" data-bs-toggle="modal" data-bs-target="#diagModal">
+                        <div class="quick-action-icon">
+                            <i class="bi bi-clipboard-check"></i>
+                        </div>
+                        <span class="quick-action-text">タイプ再診断</span>
+                    </a>
+                    
+                    <a href="{% url 'tasks:analysis_page' %}" class="quick-action-btn">
+                        <div class="quick-action-icon">
+                            <i class="bi bi-graph-up"></i>
+                        </div>
+                        <span class="quick-action-text">詳細分析を見る</span>
+                    </a>
                 </div>
             </div>
         </div>
@@ -144,20 +868,23 @@
 </div>
 
 <!-- Diagnosis Modal -->
-<div class="modal fade" id="diagModal" tabindex="-1">
+<div class="modal fade diagnosis-modal" id="diagModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">性格診断</h5>
+                <h5 class="modal-title">
+                    <i class="bi bi-clipboard-check me-2"></i>
+                    性格診断
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div id="diagContent">
-                    <div class="text-center">
+                    <div class="diagnosis-start">
                         <h4>あなたの作業スタイルを診断します</h4>
-                        <p class="text-muted">7つの質問に答えて、最適なタスク管理方法を見つけましょう</p>
-                        <button class="btn btn-primary" id="startDiagnosisBtn">
-                            <i class="bi bi-play-fill"></i> 診断開始
+                        <p>7つの質問に答えて、最適なタスク管理方法を見つけましょう</p>
+                        <button class="diagnosis-start-btn" onclick="beginDiagnosis()">
+                            <i class="bi bi-play-fill me-2"></i> 診断開始
                         </button>
                     </div>
                 </div>
@@ -236,144 +963,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-.progress-ring-container {
-    position: relative;
-    display: inline-block;
-}
-
-.progress-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 1.5rem;
-    font-weight: bold;
-}
-
-.streak-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-}
-
-.streak-text {
-    font-size: 2rem;
-    font-weight: bold;
-}
-
-.task-item {
-    border-left: 4px solid #dee2e6;
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-
-.task-item:hover {
-    border-left-color: #007bff;
-    background-color: #f8f9fa;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.task-item.doing {
-    border-left-color: #28a745;
-    background-color: #d4edda;
-}
-
-.task-item.done {
-    border-left-color: #6c757d;
-    background-color: #e9ecef;
-    opacity: 0.7;
-}
-
-.task-actions {
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.task-item:hover .task-actions {
-    opacity: 1;
-}
-
-/* ドラッグアンドドロップ用スタイル */
-.task-drag-handle {
-    cursor: grab;
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
-}
-
-.task-drag-handle:hover {
-    opacity: 1;
-}
-
-.task-drag-handle:active {
-    cursor: grabbing;
-}
-
-.sortable-ghost {
-    opacity: 0.5;
-    background-color: #f8f9fa;
-    border: 2px dashed #007bff;
-}
-
-.sortable-chosen {
-    background-color: #e3f2fd;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.sortable-drag {
-    opacity: 0.8;
-    transform: rotate(5deg);
-}
-
-/* 重要度バッジ用スタイル */
-.importance-badge {
-    font-size: 0.7rem;
-    font-weight: bold;
-    padding: 0.2rem 0.4rem;
-    margin-right: 0.5rem;
-    vertical-align: middle;
-}
-
-.task-actions .badge {
-    font-size: 0.7rem;
-    padding: 0.25rem 0.5rem;
-}
-
-/* ソート済みボタン用スタイル */
-.btn-outline-secondary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.btn-outline-secondary:disabled:hover {
-    opacity: 0.6;
-}
-
-.diagnosis-question {
-    display: none;
-}
-
-.diagnosis-question.active {
-    display: block;
-}
-
-.progress-indicator {
-    height: 4px;
-    background-color: #e9ecef;
-    border-radius: 2px;
-    overflow: hidden;
-    margin-bottom: 2rem;
-}
-
-.progress-bar {
-    height: 100%;
-    background-color: #007bff;
-    transition: width 0.3s ease;
-}
-</style>
 {% endblock %}

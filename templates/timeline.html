@@ -30,67 +30,140 @@
 
 {% block extra_css %}
 <style>
-.timeline-item {
-    border-left: 3px solid #dee2e6;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    transition: all 0.3s ease;
-    position: relative;
+/* タイムラインページ専用スタイル */
+body {
+    background-color: #f8f9fa;
 }
 
-.timeline-item:hover {
-    border-left-color: #007bff;
-    background-color: #f8f9fa;
-    transform: translateX(5px);
+.main-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.main-column {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+}
+
+/* ヘッダー部分 */
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.header-text h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #333;
+    margin: 0;
+}
+
+.header-text p {
+    color: #666;
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* タイムラインアイテム */
+.timeline-item {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .timeline-item::before {
     content: '';
     position: absolute;
-    left: -8px;
-    top: 1.5rem;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background-color: #007bff;
-    border: 2px solid white;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.timeline-item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(102, 126, 234, 0.15);
+    border-color: #667eea;
 }
 
 .timeline-item.task-start::before {
-    background-color: #28a745;
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
 }
 
 .timeline-item.task-stop::before {
-    background-color: #ffc107;
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
 }
 
 .timeline-item.task-complete::before {
-    background-color: #dc3545;
+    background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);
 }
 
 .timeline-item.task-shared::before {
-    background-color: #17a2b8;
+    background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
 }
 
 .timeline-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .timeline-user {
-    font-weight: bold;
-    color: #007bff;
+    font-weight: 600;
+    color: #667eea;
+    font-size: 1.1rem;
 }
 
 .timeline-time {
-    font-size: 0.875rem;
-    color: #6c757d;
+    font-size: 0.9rem;
+    color: #667eea;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    font-weight: 500;
 }
 
 .timeline-content {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.1rem;
+    color: #333;
+    line-height: 1.6;
+    font-weight: 500;
 }
 
 .timeline-actions {
