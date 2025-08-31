@@ -10,6 +10,7 @@ urlpatterns = [
     path('analysis/', views.analysis_page, name='analysis_page'),
     path('analytics/', views.analytics, name='analytics'),
     path('logout/', views.logout_view, name='logout'),
+    path('signup/', views.signup_view, name='signup'),
     
     # API
     path('api/tasks/', views.api_tasks, name='api_tasks'),

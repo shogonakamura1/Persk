@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Persk - ログイン{% endblock %}
+{% block title %}Persk - 新規登録{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -33,18 +33,6 @@ body {
     gap: 0.5rem;
 }
 
-.ai-icon {
-    width: 24px;
-    height: 24px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: bold;
-}
-
 .app-title {
     font-size: 1.2rem;
     font-weight: 600;
@@ -69,23 +57,6 @@ body {
     justify-content: center;
     color: white;
     text-decoration: none;
-}
-
-.share-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.9rem;
-    text-decoration: none;
-    transition: all 0.3s ease;
-}
-
-.share-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    color: white;
-    transform: translateY(-1px);
 }
 
 /* メインコンテンツ */
@@ -170,7 +141,7 @@ body {
     color: #999;
 }
 
-/* ログインボタン */
+/* 登録ボタン */
 .login-btn {
     width: 100%;
     padding: 1rem;
@@ -190,7 +161,7 @@ body {
     box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
 }
 
-/* 新規登録リンク */
+/* ログインリンク */
 .register-section {
     text-align: center;
 }
@@ -259,7 +230,6 @@ body {
             <a href="#" class="help-icon">
                 <i class="bi bi-question"></i>
             </a>
-            
         </div>
     </div>
 
@@ -286,32 +256,40 @@ body {
                 {% endfor %}
             {% endif %}
             
-            <!-- ログインフォーム -->
+            <!-- 新規登録フォーム -->
             <form method="post">
                 {% csrf_token %}
                 <div class="form-group">
-                    <label for="id_username" class="form-label">メールアドレス</label>
-                    <input type="text" class="form-input" id="id_username" name="username" placeholder="your@email.com" required>
+                    <label for="id_username" class="form-label">ユーザー名</label>
+                    <input type="text" class="form-input" id="id_username" name="username" placeholder="ユーザー名を入力" required>
                 </div>
                 <div class="form-group">
-                    <label for="id_password" class="form-label">パスワード</label>
-                    <input type="password" class="form-input" id="id_password" name="password" placeholder="パスワードを入力" required>
+                    <label for="id_email" class="form-label">メールアドレス</label>
+                    <input type="email" class="form-input" id="id_email" name="email" placeholder="your@email.com" required>
                 </div>
-                <button type="submit" class="login-btn">ログイン</button>
+                <div class="form-group">
+                    <label for="id_password1" class="form-label">パスワード</label>
+                    <input type="password" class="form-input" id="id_password1" name="password1" placeholder="パスワードを入力" required>
+                </div>
+                <div class="form-group">
+                    <label for="id_password2" class="form-label">パスワード（確認）</label>
+                    <input type="password" class="form-input" id="id_password2" name="password2" placeholder="パスワードを再入力" required>
+                </div>
+                <button type="submit" class="login-btn">新規登録</button>
             </form>
             
             <!-- フォームエラー -->
             {% if form.errors %}
             <div class="alert alert-danger">
                 <i class="bi bi-exclamation-triangle"></i>
-                ユーザー名またはパスワードが正しくありません。
+                入力内容にエラーがあります。確認してください。
             </div>
             {% endif %}
             
-            <!-- 新規登録リンク -->
+            <!-- ログインリンク -->
             <div class="register-section">
-                <p class="register-text">アカウントをお持ちでない方は</p>
-                <a href="{% url 'tasks:signup' %}" class="register-link">新規登録はこちら</a>
+                <p class="register-text">既にアカウントをお持ちの方は</p>
+                <a href="{% url 'login' %}" class="register-link">ログインはこちら</a>
             </div>
         </div>
     </div>

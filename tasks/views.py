@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
+from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -162,6 +163,21 @@ def logout_view(request):
     logout(request)
     messages.success(request, 'ログアウトしました')
     return redirect('login')
+
+
+def signup_view(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            # ユーザープロフィールを作成
+            UserProfile.objects.create(user=user)
+            messages.success(request, 'アカウントが正常に作成されました。ログインしてください。')
+            return redirect('login')
+    else:
+        form = UserCreationForm()
+    
+    return render(request, 'registration/signup.html', {'form': form})
 
 
 # API Views
